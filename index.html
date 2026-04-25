@@ -383,12 +383,28 @@
         </div>
 
         <div class="settings-section">
-          <h3 class="settings-heading">IOL RSS Feed</h3>
-          <p class="settings-desc">The portal fetches live IOL stories via RSS. If the feed fails, it falls back to curated sample stories.</p>
+          <h3 class="settings-heading">Live IOL Feed — Cloudflare Worker Setup</h3>
+          <p class="settings-desc">IOL's RSS feed blocks browser requests (no CORS headers). The solution is a <strong style="color:var(--white)">free Cloudflare Worker</strong> that proxies the feed server-side. Setup takes 2 minutes.</p>
+
+          <div style="background:var(--gray3);border-radius:3px;padding:1rem 1.25rem;margin-bottom:1rem">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);letter-spacing:2px;margin-bottom:10px">SETUP STEPS</div>
+            <ol class="deploy-steps">
+              <li>Go to <a href="https://dash.cloudflare.com" target="_blank" class="link">dash.cloudflare.com</a> → sign up free (no credit card needed)</li>
+              <li>Click <strong>Workers &amp; Pages</strong> → <strong>Create</strong> → <strong>Create Worker</strong></li>
+              <li>Delete the default code and paste the entire contents of <code>worker.js</code> (included in your zip)</li>
+              <li>Click <strong>Deploy</strong> — your worker URL appears e.g. <code>https://iol-rss.yourname.workers.dev</code></li>
+              <li>Open <code>app.js</code> and replace the empty string on line 18 with your worker URL:<br>
+                <code style="display:block;margin-top:6px;padding:6px 8px;background:var(--gray2);border-radius:2px">const WORKER_BASE_URL = 'https://iol-rss.yourname.workers.dev';</code>
+              </li>
+              <li>Re-upload <code>app.js</code> to your GitHub Pages repo — live stories load instantly</li>
+            </ol>
+          </div>
+
           <div class="feed-info">
-            <div class="feed-info-row"><span>Primary feed:</span><code>https://www.iol.co.za/cmlink/1.1439985</code></div>
-            <div class="feed-info-row"><span>Proxy used:</span><code>https://api.rss2json.com/v1/api.json</code></div>
-            <div class="feed-info-row"><span>Status:</span><span id="feed-status-settings" class="status-unknown">Unknown</span></div>
+            <div class="feed-info-row"><span>Worker URL:</span><input id="worker-url-input" class="form-input" style="font-family:var(--font-mono);font-size:11px;padding:4px 8px;max-width:400px" placeholder="https://iol-rss.yourname.workers.dev" readonly /></div>
+            <div class="feed-info-row"><span>RSS feeds:</span><code>iol.co.za/rss/extended/iol/{section}/</code></div>
+            <div class="feed-info-row"><span>Free tier:</span><code>100,000 requests/day</code></div>
+            <div class="feed-info-row"><span>Status:</span><span id="feed-status-settings" class="status-unknown">Not tested</span></div>
           </div>
           <button class="btn btn-outline" id="test-feed-btn">Test Feed Connection</button>
         </div>

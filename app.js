@@ -14,7 +14,7 @@ const API_MODEL = 'claude-sonnet-4-20250514';
  * e.g. 'https://iol-rss.yourname.workers.dev'
  * Leave as empty string to use pre-loaded stories only.
  */
-const WORKER_BASE_URL = '';  /https://ioltester.fhmkhota.workers.dev// <- PASTE YOUR CLOUDFLARE WORKER URL HERE
+const WORKER_BASE_URL = 'https://ioltester.fhmkhota.workers.dev';
 
 const SECTIONS = ['news','sport','business','entertainment','technology','motoring','lifestyle'];
 
@@ -84,13 +84,11 @@ async function loadStories(isRefresh = false) {
   const statusEl = document.getElementById('feed-status');
 
   if (!hasWorker()) {
-    // No worker configured — use pre-loaded stories
+    // No worker configured — use pre-loaded stories immediately
     allStories = [...PRELOADED_STORIES];
-    statusEl.textContent = `● ${allStories.length} IOL stories (configure Worker for live updates)`;
-    statusEl.className   = 'feed-status fallback';
-    info.textContent     = 'Pre-loaded: 25 Apr 2026';
+    if (statusEl) { statusEl.textContent = '\u25cf ' + allStories.length + ' IOL stories loaded'; statusEl.className = 'feed-status live'; }
+    if (info)     { info.textContent = 'Pre-loaded \u00b7 25 Apr 2026'; }
     renderStories();
-    updateWorkerBanner(false);
     return;
   }
 
@@ -120,34 +118,17 @@ async function loadStories(isRefresh = false) {
     statusEl.textContent = `● LIVE — ${allStories.length} IOL stories`;
     statusEl.className   = 'feed-status live';
     info.textContent     = 'Updated ' + new Date().toLocaleTimeString('en-ZA', { hour:'2-digit', minute:'2-digit' });
-    updateWorkerBanner(true);
   } catch (e) {
     console.error('Worker fetch failed:', e);
     allStories = [...PRELOADED_STORIES];
     statusEl.textContent = '● Pre-loaded stories (worker unavailable)';
     statusEl.className   = 'feed-status fallback';
     info.textContent     = 'Live fetch failed';
-    updateWorkerBanner(false);
   }
 
   renderStories();
 }
 
-function updateWorkerBanner(isLive) {
-  let banner = document.getElementById('worker-banner');
-  if (!hasWorker()) {
-    if (!banner) {
-      banner = document.createElement('div');
-      banner.id = 'worker-banner';
-      banner.style.cssText = 'background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.3);border-radius:3px;padding:10px 14px;margin-bottom:1rem;font-size:12px;color:#ffb400;font-family:var(--font-mono);line-height:1.7';
-      banner.innerHTML = '⚡ <strong style="color:#ffd060">Live updates not configured.</strong> Deploy <code>worker.js</code> to Cloudflare Workers (free), then paste your URL into <code>app.js</code> where it says <code>WORKER_BASE_URL</code>. See <strong>Settings</strong> tab for full instructions.';
-      const panel = document.querySelector('#panel-newsfeed .panel-inner');
-      panel.insertBefore(banner, panel.firstChild);
-    }
-  } else if (banner) {
-    banner.remove();
-  }
-}
 
 function relTime(dateStr) {
   if (!dateStr) return 'Today';
