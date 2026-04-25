@@ -14,7 +14,7 @@ const API_MODEL = 'claude-sonnet-4-20250514';
  * e.g. 'https://iol-rss.yourname.workers.dev'
  * Leave as empty string to use pre-loaded stories only.
  */
-const WORKER_BASE_URL = '';  // <- PASTE YOUR CLOUDFLARE WORKER URL HERE
+const WORKER_BASE_URL = '';  /https://ioltester.fhmkhota.workers.dev// <- PASTE YOUR CLOUDFLARE WORKER URL HERE
 
 const SECTIONS = ['news','sport','business','entertainment','technology','motoring','lifestyle'];
 
