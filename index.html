@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IOL Broadcasting — Content Studio</title>
   <meta name="description" content="IOL Broadcasting Content Studio — Generate news bulletin scripts, piece-to-camera scripts, and podcast concepts powered by AI." />
-  <link rel="icon" type="image/png" href="assets/iol-logo-dark.png" />
+  <link rel="icon" type="image/png" href="iol-logo-dark.png" />
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,7 +16,7 @@
   <!-- HEADER -->
   <header class="header">
     <div class="header-left">
-      <img src="assets/iol-logo-white.png" alt="IOL Logo" class="header-logo" />
+      <img src="iol-logo-white.png" alt="IOL Logo" class="header-logo" />
       <div class="header-divider"></div>
       <div>
         <div class="header-title">IOL <span class="red">Broadcasting</span></div>
@@ -39,9 +39,7 @@
     <button class="nav-tab" data-tab="podcast">
       <span class="nav-icon">🎙</span> Podcast Generator
     </button>
-    <button class="nav-tab" data-tab="settings">
-      <span class="nav-icon">⚙️</span> Settings
-    </button>
+
   </nav>
 
   <!-- ===== PANEL: NEWSFEED ===== -->
@@ -355,78 +353,9 @@
     </div>
   </section>
 
-  <!-- ===== PANEL: SETTINGS ===== -->
-  <section id="panel-settings" class="panel">
-    <div class="panel-inner">
-      <div class="section-header">
-        <h2 class="section-title">Settings</h2>
-        <p class="section-sub">Configure your API key and portal preferences</p>
-      </div>
-
-      <div class="settings-card">
-        <div class="settings-section">
-          <h3 class="settings-heading">Anthropic API Key</h3>
-          <p class="settings-desc">Your API key is stored locally in your browser and never sent to any server other than Anthropic. <a href="https://console.anthropic.com" target="_blank" class="link">Get your key →</a></p>
-          <div class="api-key-row">
-            <input class="form-input" id="api-key-input" type="password" placeholder="sk-ant-..." />
-            <button class="btn btn-primary" id="save-api-key-btn">Save Key</button>
-          </div>
-          <div class="api-key-status" id="api-key-status"></div>
-        </div>
-
-        <div class="settings-section">
-          <h3 class="settings-heading">Live IOL Feed — Cloudflare Worker Setup</h3>
-          <p class="settings-desc">IOL's RSS feed blocks browser requests (no CORS headers). The solution is a <strong style="color:var(--white)">free Cloudflare Worker</strong> that proxies the feed server-side. Setup takes 2 minutes.</p>
-
-          <div style="background:var(--gray3);border-radius:3px;padding:1rem 1.25rem;margin-bottom:1rem">
-            <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);letter-spacing:2px;margin-bottom:10px">SETUP STEPS</div>
-            <ol class="deploy-steps">
-              <li>Go to <a href="https://dash.cloudflare.com" target="_blank" class="link">dash.cloudflare.com</a> → sign up free (no credit card needed)</li>
-              <li>Click <strong>Workers &amp; Pages</strong> → <strong>Create</strong> → <strong>Create Worker</strong></li>
-              <li>Delete the default code and paste the entire contents of <code>worker.js</code> (included in your zip)</li>
-              <li>Click <strong>Deploy</strong> — your worker URL appears e.g. <code>https://iol-rss.yourname.workers.dev</code></li>
-              <li>Open <code>app.js</code> and replace the empty string on line 18 with your worker URL:<br>
-                <code style="display:block;margin-top:6px;padding:6px 8px;background:var(--gray2);border-radius:2px">const WORKER_BASE_URL = 'https://iol-rss.yourname.workers.dev';</code>
-              </li>
-              <li>Re-upload <code>app.js</code> to your GitHub Pages repo — live stories load instantly</li>
-            </ol>
-          </div>
-
-          <div class="feed-info">
-            <div class="feed-info-row"><span>Worker URL:</span><input id="worker-url-input" class="form-input" style="font-family:var(--font-mono);font-size:11px;padding:4px 8px;max-width:400px" placeholder="https://iol-rss.yourname.workers.dev" readonly /></div>
-            <div class="feed-info-row"><span>RSS feeds:</span><code>iol.co.za/rss/extended/iol/{section}/</code></div>
-            <div class="feed-info-row"><span>Free tier:</span><code>100,000 requests/day</code></div>
-            <div class="feed-info-row"><span>Status:</span><span id="feed-status-settings" class="status-unknown">Not tested</span></div>
-          </div>
-          <button class="btn btn-outline" id="test-feed-btn">Test Feed Connection</button>
-        </div>
-
-        <div class="settings-section">
-          <h3 class="settings-heading">Branding</h3>
-          <p class="settings-desc">IOL Broadcasting portal — built for the IOL team. All generated content is watermarked with IOL branding.</p>
-          <div class="brand-preview">
-            <img src="assets/iol-logo-white.png" alt="IOL Logo White" style="height:40px;background:#0A0A0A;padding:8px 12px;border-radius:4px" />
-            <img src="assets/iol-logo-dark.png" alt="IOL Logo Dark" style="height:40px;background:#FAFAFA;padding:8px 12px;border-radius:4px" />
-          </div>
-        </div>
-
-        <div class="settings-section">
-          <h3 class="settings-heading">Deploy to GitHub Pages</h3>
-          <p class="settings-desc">This portal is a static site — zero backend required. Deploy it in 3 steps:</p>
-          <ol class="deploy-steps">
-            <li>Create a new GitHub repository (e.g. <code>iol-broadcasting</code>)</li>
-            <li>Upload all files from this project to the repo root</li>
-            <li>Go to Settings → Pages → Source: <strong>main branch / root</strong> → Save</li>
-          </ol>
-          <p class="settings-desc" style="margin-top:8px">Your portal will be live at <code>https://yourusername.github.io/iol-broadcasting</code></p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- FOOTER -->
   <footer class="footer">
-    <img src="assets/iol-logo-white.png" alt="IOL" style="height:24px;opacity:0.6" />
+    <img src="iol-logo-white.png" alt="IOL" style="height:24px;opacity:0.6" />
     <span>IOL Broadcasting Content Studio &nbsp;·&nbsp; Powered by Claude AI &nbsp;·&nbsp; <a href="https://www.iol.co.za" target="_blank" class="footer-link">iol.co.za</a></span>
   </footer>
 

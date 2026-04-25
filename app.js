@@ -458,12 +458,15 @@ function showState(prefix, state, errMsg) {
 }
 
 function showSettingsAlert() {
-  alert('Please add your Anthropic API key in the ⚙️ Settings tab first.');
-  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelector('[data-tab="settings"]').classList.add('active');
-  document.getElementById('panel-settings').classList.add('active');
-  setTimeout(()=>document.getElementById('api-key-input').focus(),100);
+  const key = prompt('Enter your Anthropic API key (starts with sk-ant-):', '');
+  if (key && key.trim().startsWith('sk-ant-')) {
+    localStorage.setItem('iol_api_key', key.trim());
+    alert('API key saved. Generating now...');
+    return true;
+  } else if (key) {
+    alert('That does not look like a valid Anthropic key. Please try again.');
+  }
+  return false;
 }
 
 /* ============================================================
@@ -493,55 +496,11 @@ function flashBtn(btn,msg){ const o=btn.textContent; btn.textContent=msg; setTim
 /* ============================================================
    SETTINGS
    ============================================================ */
-window.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('iol_api_key');
-  if (saved) { document.getElementById('api-key-input').value=saved; setKeyStatus('● Key loaded','ok'); }
 
-  // Show worker URL if configured
-  const workerInput = document.getElementById('worker-url-input');
-  if (workerInput) {
-    workerInput.value = WORKER_BASE_URL;
-    if (WORKER_BASE_URL) workerInput.style.borderColor = 'rgba(0,200,100,0.5)';
-  }
-});
 
-document.getElementById('save-api-key-btn').addEventListener('click', () => {
-  const key = document.getElementById('api-key-input').value.trim();
-  if (!key) { setKeyStatus('Enter an API key','err'); return; }
-  if (!key.startsWith('sk-ant-')) { setKeyStatus('⚠ Should start with sk-ant-...','err'); return; }
-  localStorage.setItem('iol_api_key', key);
-  setKeyStatus('● Saved','ok');
-});
-function setKeyStatus(msg,cls){ const el=document.getElementById('api-key-status'); el.textContent=msg; el.className='api-key-status '+cls; }
 
-document.getElementById('test-feed-btn').addEventListener('click', async () => {
-  const btn=document.getElementById('test-feed-btn'), statusEl=document.getElementById('feed-status-settings');
-  btn.disabled=true; btn.textContent='Testing...';
-  statusEl.textContent='Testing...'; statusEl.className='status-unknown';
 
-  if (!hasWorker()) {
-    statusEl.textContent='No Cloudflare Worker URL configured — see instructions below';
-    statusEl.className='status-err';
-    btn.disabled=false; btn.textContent='Test Feed Connection';
-    return;
-  }
 
-  try {
-    const res  = await fetch(`${WORKER_BASE_URL.replace(/\/$/,'')}/news`, { signal:AbortSignal.timeout(8000) });
-    const data = await res.json();
-    if (data.ok && data.stories?.length > 0) {
-      statusEl.textContent = `✓ Worker live — ${data.stories.length} IOL news stories fetched`;
-      statusEl.className = 'status-ok';
-    } else {
-      statusEl.textContent = 'Worker responded but returned no stories: ' + (data.error||'unknown');
-      statusEl.className = 'status-err';
-    }
-  } catch(e) {
-    statusEl.textContent = 'Worker unreachable: ' + e.message;
-    statusEl.className = 'status-err';
-  }
-  btn.disabled=false; btn.textContent='Test Feed Connection';
-});
 
 /* ============================================================
    EVENT BINDINGS
