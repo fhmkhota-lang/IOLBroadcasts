@@ -85,7 +85,8 @@ async function loadStories(isRefresh = false) {
 
   if (!hasWorker()) {
     // No worker configured — use pre-loaded stories immediately
-    allStories = [...PRELOADED_STORIES];
+    visibleCount = PAGE_SIZE;
+  allStories = [...PRELOADED_STORIES];
     if (statusEl) { statusEl.textContent = '\u25cf ' + allStories.length + ' IOL stories loaded'; statusEl.className = 'feed-status live'; }
     if (info)     { info.textContent = 'Pre-loaded \u00b7 25 Apr 2026'; }
     renderStories();
@@ -144,6 +145,9 @@ function relTime(dateStr) {
 /* ============================================================
    RENDER STORIES
    ============================================================ */
+const PAGE_SIZE = 10;
+let visibleCount = PAGE_SIZE;
+
 function renderStories() {
   const grid = document.getElementById('stories-grid');
   const filtered = currentFilter === 'all'
@@ -155,7 +159,10 @@ function renderStories() {
     return;
   }
 
-  grid.innerHTML = filtered.map(s =>
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > visibleCount;
+
+  const cards = visible.map(s =>
     `<div class="story-card ${selectedIds.has(s.id) ? 'selected' : ''}" data-id="${escAttr(s.id)}" tabindex="0" role="checkbox" aria-checked="${selectedIds.has(s.id)}">
       <div class="story-check" aria-hidden="true">✓</div>
       <div class="story-tag">${escHtml(s.cat)}</div>
@@ -169,10 +176,23 @@ function renderStories() {
     </div>`
   ).join('');
 
+  const loadMore = hasMore
+    ? `<div style="grid-column:1/-1;text-align:center;padding:1rem 0">
+        <button class="btn btn-outline" id="load-more-btn" style="min-width:180px">
+          Load More (${filtered.length - visibleCount} remaining)
+        </button>
+       </div>`
+    : '';
+
+  grid.innerHTML = cards + loadMore;
+
   grid.querySelectorAll('.story-card').forEach(card => {
     card.addEventListener('click', () => toggleStory(card.dataset.id));
     card.addEventListener('keydown', e => { if (e.key===' '||e.key==='Enter') toggleStory(card.dataset.id); });
   });
+
+  const lmBtn = document.getElementById('load-more-btn');
+  if (lmBtn) lmBtn.addEventListener('click', () => { visibleCount += PAGE_SIZE; renderStories(); });
 }
 
 function toggleStory(id) {
@@ -191,6 +211,7 @@ function updateActionBar() {
 
 function filterFeed(cat) {
   currentFilter = cat;
+  visibleCount = PAGE_SIZE;
   document.querySelectorAll('#cat-pills-feed .cat-pill').forEach(p => p.classList.toggle('active', p.dataset.cat===cat));
   renderStories();
 }
@@ -221,16 +242,18 @@ document.getElementById('gen-bulletin-btn').addEventListener('click', async () =
   ].filter(Boolean).join('\n')).join('\n\n---\n\n');
 
   const styleGuides = {
-    formal:         'FORMAL / EVENING NEWS — Authoritative, measured, BBC/SABC style. Full sentences, no slang.',
-    conversational: 'CONVERSATIONAL / DAYTIME — Warm, direct. Contractions fine. Speak TO the viewer.',
-    energetic:      'ENERGETIC / SOCIAL MEDIA — Hook with the first word. Short punchy sentences. High energy.',
-    investigative:  'INVESTIGATIVE — Analytical, evidence-first. Signal significance before facts.',
+    social:         'SOCIAL / TIKTOK-FIRST — Casual, reactive, conversational. Like texting a friend but on camera.',
+    conversational: 'CONVERSATIONAL / INSTAGRAM — Warm and direct. Relatable. Feels like a creator talking to their community.',
+    energetic:      'HIGH ENERGY / REELS — Fast, punchy, hype. Every sentence lands hard. Maximum retention energy.',
+    investigative:  'DEEP DIVE — Still casual but slower and more serious. Lean into the "wait, this is actually crazy" angle.',
   };
   const words = Math.round((parseInt(duration)/60)*150);
 
-  const prompt = `You are a senior broadcast journalist for IOL Broadcasting — South Africa's leading digital news network.
+  const prompt = `You are writing a social media video script for an IOL content creator — think the style of NewsDaddy (Dylan Page) on TikTok, or the BBC's social news reporters on Instagram Reels. This is NOT a formal news broadcast. It is casual, direct, conversational storytelling for a social-first audience.
 
-Write a ${duration}-second piece-to-camera bulletin script (~${words} words of spoken copy) covering ALL ${stories.length} of these specific stories. Use the real names, numbers and facts from each story. Do not invent content or add generic filler.
+The host is on camera, speaking directly to the viewer like a friend telling them something wild they just heard. They are energetic, natural, relatable — NOT a news anchor reading a teleprompter.
+
+Write a ${duration}-second social news script covering ALL ${stories.length} of these specific stories. Use the real names, numbers and facts provided. Make it feel like the host genuinely cares about these stories and wants to share them.
 
 ════════════════════════════════════
 STORIES TO COVER:
@@ -238,16 +261,17 @@ STORIES TO COVER:
 ${storyContext}
 ════════════════════════════════════
 
-STYLE: ${styleGuides[style]||styleGuides.formal}
+STYLE: ${styleGuides[style]||styleGuides.social}
 
-FORMAT:
-- Label every line of copy "ANCHOR:"
-- Stage directions in [SQUARE BRACKETS] — e.g. [PAUSE], [GRAPHIC: text], [LOOK TO CAMERA 2], [B-ROLL CUE]
-- Open with the most gripping specific detail from the lead story — hook in 5 words
-- Use transitions: "Also tonight...", "In sport...", "Turning to politics...", "On the business front..."
-- Each story gets dedicated copy using specific details from its excerpt
-- Close: "For the full story visit iol.co.za — I'm [ANCHOR NAME], stay informed."
-- ~${words} words of spoken copy total
+SCRIPT RULES:
+1. Label every line "HOST:" — no "ANCHOR", no formal broadcast language
+2. HOOK: First 5 words must stop the scroll. Start mid-thought, with a reaction, a shocking fact, or a question. E.g. "So the Hawks literally just—" or "You will not believe what—" or "R637 million. Gone. No receipts."
+3. For each story: state what happened, why it matters, add a natural human reaction ("and honestly that's wild", "which — come on", "I cannot make this up")
+4. Speak in SHORT sentences. One idea per breath. No sub-clauses.
+5. Use transitions that feel spoken: "Okay moving on—", "Right, next story—", "And then there's this—"
+6. Stage directions in [SQUARE BRACKETS] — [point to camera], [shake head], [pause for effect], [lean in], [raise eyebrows]
+7. End with an engagement hook: ask viewers a question, tell them to comment, or tease "link in bio for the full story on iol.co.za"
+8. ~${words} words total. Punchy. No wasted words.
 
 Output ONLY the formatted script. No preamble.`;
 
@@ -278,37 +302,53 @@ document.getElementById('gen-custom-btn').addEventListener('click', async () => 
   if (!headline && !content) { alert('Please enter at least a headline or story content.'); return; }
   showState('custom', 'loading');
 
-  const styleGuides = { formal:'FORMAL / EVENING NEWS', conversational:'CONVERSATIONAL / DAYTIME', energetic:'ENERGETIC / SOCIAL MEDIA', investigative:'INVESTIGATIVE' };
+  const styleGuides = {
+    social:         'SOCIAL / TIKTOK-FIRST — Casual, reactive, like texting a friend but on camera. Reactions welcome.',
+    conversational: 'CONVERSATIONAL / INSTAGRAM — Warm, relatable, like a creator talking to their community.',
+    energetic:      'HIGH ENERGY / REELS — Fast, punchy, every sentence hits hard. Maximum scroll-stopping energy.',
+    investigative:  'DEEP DIVE — Casual but slower and deliberate. Lean into the "wait, this is actually insane" angle.',
+  };
   const words = Math.round((parseInt(duration)/60)*150);
-  const anchorSetup = anchors==='2'
-    ? 'TWO co-anchors: label all copy "ANCHOR 1:" or "ANCHOR 2:". Anchor 1 sets context, Anchor 2 delivers key facts and closes.'
-    : 'SINGLE anchor. Label all copy "ANCHOR:".';
-  const ctas = { 'TikTok':'Follow IOL on TikTok now.','Instagram Reels':'Full story in the link in our bio. Follow IOL.','YouTube':'Subscribe to IOL on YouTube.','Facebook':'Like and follow IOL on Facebook.','Twitter / X':'Follow @IOL on X for live updates.','LinkedIn':'Follow IOL on LinkedIn.','all social media platforms':'For the full story, visit iol.co.za.' };
+  const hostSetup = anchors==='2'
+    ? 'TWO hosts on camera. Label all lines "HOST 1:" or "HOST 2:". They react to each other naturally — one drops the fact, the other reacts, they riff. Feels like a conversation not a handoff.'
+    : 'SINGLE HOST on camera. Label all lines "HOST:".';
+  const ctas = {
+    'TikTok':                    'End with: "Follow IOL on TikTok for more — and drop your thoughts in the comments 👇"',
+    'Instagram Reels':           'End with: "Full story link in our bio. Follow IOL for daily updates."',
+    'YouTube':                   'End with: "Subscribe to IOL on YouTube — we post every day."',
+    'Facebook':                  'End with: "Follow IOL on Facebook and share this if it surprised you."',
+    'Twitter / X':               'End with: "Follow @IOL on X — what do you think about this? Reply below."',
+    'LinkedIn':                  'End with: "Follow IOL on LinkedIn for the stories that matter."',
+    'all social media platforms':'End with: "Follow IOL for more — full story at iol.co.za"',
+  };
 
-  const prompt = `You are a senior broadcast journalist for IOL Broadcasting, South Africa.
+  const prompt = `You are writing a social media video script for an IOL content creator. Think NewsDaddy, BBC social reporters, or any creator who explains news casually on camera to their followers. NOT a news anchor. NOT a broadcast journalist. A real person telling another person something they need to know.
 
-Write a ${duration}-second (~${words} words) piece-to-camera script for this specific story. Every sentence must reference real details — names, places, figures — from the content below.
+Write a ${duration}-second (~${words} words) script for this specific story. Every sentence must be grounded in the real facts below. Make the host sound human, not robotic.
 
 ════════════════════════════════
 STORY:
 Headline: ${headline||'(see content)'}
 Category: ${category}
-Content: ${content||'(write specifically from the headline)'}
-${instructions?`Instructions: ${instructions}`:''}
+Content: ${content||'(write specifically from the headline — be specific and factual)'}
+${instructions?`Extra notes: ${instructions}`:''}
 ════════════════════════════════
 
-ANCHORS: ${anchorSetup}
-STYLE: ${styleGuides[style]||'FORMAL / EVENING NEWS'}
+HOST FORMAT: ${hostSetup}
+STYLE: ${styleGuides[style]||styleGuides.social}
 PLATFORM: ${platform}
-END CTA: ${ctas[platform]||ctas['all social media platforms']}
+${ctas[platform]||ctas['all social media platforms']}
 
-FORMAT:
-- Hook in the FIRST 5 WORDS with the most gripping specific detail
-- Stage directions in [SQUARE BRACKETS]
-- ~${words} words of spoken copy
-- IOL-branded sign-off with the CTA above
+SCRIPT RULES:
+1. HOOK: First 5 words stop the scroll. Start mid-story, with shock, a question, or a reaction. Never start with "So today..." or "Welcome back..."
+2. Tell the story conversationally — what happened, why it matters, what the host thinks
+3. SHORT sentences. One idea at a time. Real spoken rhythm.
+4. Natural reactions in the copy: "which is wild", "I cannot make this up", "and that's just the start"
+5. Stage directions in [SQUARE BRACKETS] — [lean in], [point to camera], [pause], [raise eyebrows], [shake head]
+6. ${ctas[platform]||ctas['all social media platforms']}
+7. ~${words} words total
 
-Output ONLY the formatted script.`;
+Output ONLY the formatted script. No preamble.`;
 
   try {
     const text = await callClaude(apiKey, prompt, 1500);

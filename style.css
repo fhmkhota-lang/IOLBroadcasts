@@ -36,29 +36,6 @@ body {
   overflow-x: hidden;
 }
 
-/* --- TICKER --- */
-.ticker-wrap {
-  background: var(--red);
-  overflow: hidden;
-  white-space: nowrap;
-  height: 30px;
-  display: flex;
-  align-items: center;
-}
-.ticker-inner {
-  display: inline-block;
-  animation: ticker 60s linear infinite;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  color: #fff;
-  padding-right: 2rem;
-}
-@keyframes ticker {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-
 /* --- HEADER --- */
 .header {
   background: var(--gray1);
@@ -397,6 +374,7 @@ body {
 }
 .btn-outline:hover { border-color: rgba(255,255,255,0.3); color: var(--white); }
 .btn-sm { padding: 6px 12px; font-size: 10px; }
+#load-more-btn { margin-top: 0.5rem; }
 
 .copy-btn, .download-btn {
   padding: 5px 12px;
