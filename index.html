@@ -438,21 +438,14 @@
           <p>Select a story and click <strong>Generate Card</strong></p>
         </div>
 
-        <!-- Canvas output -->
+        <!-- Canva result area -->
         <div id="card-canvas-area" style="display:none;padding:1.5rem">
-          <!-- Carousel nav -->
-          <div id="carousel-nav" style="display:none;align-items:center;gap:12px;margin-bottom:1rem">
-            <button class="btn btn-outline btn-sm" id="carousel-prev">← Prev</button>
-            <span id="carousel-indicator" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)"></span>
-            <button class="btn btn-outline btn-sm" id="carousel-next">Next →</button>
-            <button class="btn btn-outline btn-sm" id="download-all-btn">⬇ Download All</button>
-          </div>
-          <div style="display:flex;justify-content:center">
-            <canvas id="card-canvas" style="max-width:100%;border-radius:4px;box-shadow:0 4px 24px rgba(0,0,0,0.4)"></canvas>
-          </div>
+          <div id="carousel-nav" style="display:none"></div>
+          <canvas id="card-canvas" style="display:none"></canvas>
+          <button id="download-card-btn" style="display:none"></button>
 
           <!-- Social sharing text -->
-          <div id="share-text-area" style="margin-top:1.5rem">
+          <div id="share-text-area" style="margin-top:1rem">
             <div class="script-header" style="border-radius:3px 3px 0 0;background:var(--gray3)">
               <span class="script-label">📤 Social Sharing Text</span>
               <div class="script-header-right">
