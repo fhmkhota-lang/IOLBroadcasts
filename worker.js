@@ -1,19 +1,7 @@
 /**
- * IOL Broadcasting — Cloudflare Worker v2
- * =========================================
- * - CORS proxy for IOL RSS feeds (returns story image URLs)
- * - TinyURL shortener endpoint (no API key needed)
- *
- * ENDPOINTS:
- * GET /all           → All sections as JSON (includes image URLs)
- * GET /news          → IOL News
- * GET /sport         → IOL Sport
- * GET /business      → IOL Business
- * GET /entertainment → IOL Entertainment
- * GET /technology    → IOL Technology
- * GET /motoring      → IOL Motoring
- * GET /lifestyle     → IOL Lifestyle
- * GET /shorten?url=  → Shorten a URL via TinyURL
+ * IOL Broadcasting — Cloudflare Worker v3
+ * - Fixed multiline media:content image extraction
+ * - TinyURL shortener endpoint
  */
 
 const CORS_HEADERS = {
@@ -36,40 +24,37 @@ export default {
     const url     = new URL(request.url);
     const section = url.pathname.replace(/^\//, '').toLowerCase().trim();
 
-    // ── TinyURL shortener ───────────────────────────────────────────────────
+    // TinyURL shortener
     if (section === 'shorten') {
       const longUrl = url.searchParams.get('url');
       if (!longUrl) return jsonResponse({ ok: false, error: 'Missing ?url= parameter' }, 400);
       try {
-        const res  = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
-        const short = await res.text();
-        if (!short.startsWith('http')) throw new Error('TinyURL returned invalid response');
+        const res   = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+        const short = (await res.text()).trim();
+        if (!short.startsWith('http')) throw new Error('Invalid response');
         return jsonResponse({ ok: true, short, long: longUrl });
       } catch (e) {
         return jsonResponse({ ok: false, error: e.message, fallback: longUrl }, 200);
       }
     }
 
-    // ── RSS feeds ───────────────────────────────────────────────────────────
+    // RSS feeds
     try {
       if (section === 'all') {
         const results = await Promise.allSettled(SECTIONS.map(s => fetchSection(s)));
         const stories = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-        const seen    = new Set();
-        const unique  = stories.filter(s => {
+        const seen = new Set();
+        const unique = stories.filter(s => {
           const key = s.headline.toLowerCase().slice(0, 60);
           if (seen.has(key)) return false;
           seen.add(key); return true;
         });
         return jsonResponse({ ok: true, count: unique.length, stories: unique });
       }
-
       if (!SECTIONS.includes(section))
         return jsonResponse({ ok: false, error: `Unknown section "${section}"` }, 400);
-
       const stories = await fetchSection(section);
       return jsonResponse({ ok: true, count: stories.length, section, stories });
-
     } catch (err) {
       return jsonResponse({ ok: false, error: err.message }, 500);
     }
@@ -78,11 +63,11 @@ export default {
 
 async function fetchSection(section) {
   const rssUrl = `https://iol.co.za/rss/extended/iol/${section}/`;
-  const res    = await fetch(rssUrl, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IOL Broadcasting Bot/1.0)', 'Accept': 'application/rss+xml, application/xml, text/xml, */*' },
+  const res = await fetch(rssUrl, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; IOL Broadcasting Bot/1.0)', 'Accept': 'application/rss+xml, text/xml, */*' },
     cf: { cacheTtl: 300, cacheEverything: true },
   });
-  if (!res.ok) throw new Error(`IOL feed returned ${res.status} for "${section}"`);
+  if (!res.ok) throw new Error(`IOL feed ${res.status} for "${section}"`);
   return parseRSS(await res.text(), section, SECTION_LABELS[section] || 'IOL');
 }
 
@@ -99,23 +84,36 @@ function parseRSS(xml, section, defaultSource) {
     const author  = extractCDATA(item, 'author') || defaultSource;
     const pubDate = extractTag(item, 'pubDate') || '';
 
-    // Try multiple image sources from the RSS
-    const imgUrl  =
-      extractAttr(item, 'media:content', 'url') ||
-      extractAttr(item, 'media:thumbnail', 'url') ||
-      extractAttr(item, 'enclosure', 'url') ||
-      extractImgSrc(desc) ||
-      extractImgSrc(content) ||
-      '';
+    // FIX: media:content url attribute may be on the same or next line — use multiline match
+    // Pattern: <media:content ... url="VALUE" ...> across multiple lines
+    let imgUrl = '';
+    const mediaMatch = item.match(/<media:content[\s\S]*?url="([^"]+)"/i);
+    if (mediaMatch) {
+      imgUrl = mediaMatch[1];
+    } else {
+      // fallback: media:thumbnail
+      const thumbMatch = item.match(/<media:thumbnail[\s\S]*?url="([^"]+)"/i);
+      if (thumbMatch) imgUrl = thumbMatch[1];
+    }
+    // Final fallback: first <img src> in content
+    if (!imgUrl) {
+      const imgSrc = content.match(/<img[^>]+src="([^"]+)"/i);
+      if (imgSrc) imgUrl = imgSrc[1];
+    }
 
     if (!title || title.length < 5) continue;
 
     let cat = section;
     if (link) {
-      if (/\/politics\//.test(link))      cat = 'politics';
-      else if (/\/sport\//.test(link))    cat = 'sport';
-      else if (/\/business\//.test(link)) cat = 'business';
-      else if (/\/crime/.test(link))      cat = 'news';
+      if (/\/politics\//.test(link))       cat = 'politics';
+      else if (/\/sport\//.test(link))     cat = 'sport';
+      else if (/\/business\//.test(link))  cat = 'business';
+      else if (/\/crime/.test(link))       cat = 'news';
+      else if (/\/motoring\//.test(link))  cat = 'motoring';
+      else if (/\/lifestyle\//.test(link)) cat = 'lifestyle';
+      else if (/\/travel\//.test(link))    cat = 'travel';
+      else if (/\/technology\//.test(link))cat = 'technology';
+      else if (/\/entertainment\//.test(link)) cat = 'entertainment';
     }
 
     const rawText = desc || content.slice(0, 600);
@@ -144,16 +142,6 @@ function extractTag(xml, tag) {
   const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
   const m  = xml.match(re);
   return m ? m[1].trim() : '';
-}
-function extractAttr(xml, tag, attr) {
-  const re = new RegExp(`<${tag}[^>\\s]*(?:[^>]*\\s)${attr}="([^"]*)"`, 'i');
-  const m  = xml.match(re) || xml.match(new RegExp(`<${tag}[^>]*${attr}="([^"]*)"`, 'i'));
-  return m ? m[1] : '';
-}
-function extractImgSrc(html) {
-  if (!html) return '';
-  const m = html.match(/<img[^>]+src="([^"]+)"/i);
-  return m ? m[1] : '';
 }
 function stripHtml(html) {
   return html.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'").replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
