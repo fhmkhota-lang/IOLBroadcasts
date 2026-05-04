@@ -651,3 +651,10 @@ body {
   white-space: pre-wrap;
   color: var(--white);
 }
+
+/* --- CARD DESIGNER --- */
+#card-canvas-draw { cursor: grab; }
+#card-canvas-draw:active { cursor: grabbing; }
+#cd-share-text { font-family: var(--font-body); font-size: 13px; line-height: 1.7; }
+#carousel-controls { display: flex; }
+.form-textarea { line-height: 1.6; }

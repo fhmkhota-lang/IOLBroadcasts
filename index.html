@@ -357,107 +357,125 @@
   </section>
 
 
-  <!-- ===== PANEL: SOCIAL CARDS ===== -->
+
+  <!-- ===== PANEL: SOCIAL CARD DESIGNER ===== -->
   <section id="panel-cards" class="panel">
-    <div class="panel-inner">
+    <div class="panel-inner" style="max-width:1300px">
       <div class="section-header">
-        <h2 class="section-title">Social Media Card Creator</h2>
-        <p class="section-sub">Generate branded IOL cards for social media — single card or full carousel</p>
+        <h2 class="section-title">Social Card Designer</h2>
+        <p class="section-sub">Design branded IOL cards for social media — single posts and carousels</p>
       </div>
 
-      <!-- Story Selector -->
-      <div class="form-row">
-        <label class="form-label">Select a Story</label>
-        <select class="form-select" id="card-story-select">
-          <option value="">— Choose a story from today's feed —</option>
-        </select>
-      </div>
+      <div style="display:grid;grid-template-columns:380px 1fr;gap:1.5rem;align-items:start">
 
-      <!-- Or paste custom -->
-      <div id="card-custom-fields" style="display:none">
-        <div class="form-grid-2" style="margin-top:0.5rem">
-          <div class="form-row">
-            <label class="form-label">Headline</label>
-            <input class="form-input" id="card-headline" placeholder="Story headline..." />
-          </div>
-          <div class="form-row">
-            <label class="form-label">Category</label>
-            <select class="form-select" id="card-category">
-              <option value="news">News</option>
-              <option value="politics">Politics</option>
-              <option value="sport">Sport</option>
-              <option value="business">Business</option>
-              <option value="entertainment">Entertainment</option>
-              <option value="technology">Technology</option>
-              <option value="motoring">Motoring</option>
-              <option value="lifestyle">Lifestyle</option>
-              <option value="travel">Travel</option>
+        <!-- ── LEFT PANEL: Controls ── -->
+        <div style="background:var(--gray2);border:1px solid var(--border);border-radius:4px;overflow:hidden">
+
+          <!-- Story picker -->
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+            <label class="form-label">Load from story feed</label>
+            <select class="form-select" id="card-story-select">
+              <option value="">— Select a story —</option>
             </select>
           </div>
-        </div>
-        <div class="form-row">
-          <label class="form-label">Caption / Body Text</label>
-          <textarea class="form-textarea" id="card-caption" rows="3" placeholder="Card caption text..."></textarea>
-        </div>
-        <div class="form-row">
-          <label class="form-label">Image URL (optional)</label>
-          <input class="form-input" id="card-image-url" placeholder="https://..." />
-        </div>
-        <div class="form-row">
-          <label class="form-label">Story URL (for sharing link)</label>
-          <input class="form-input" id="card-story-url" placeholder="https://iol.co.za/..." />
-        </div>
-      </div>
 
-      <!-- Card Type Selector -->
-      <div class="form-row" style="margin-top:1rem">
-        <label class="form-label">Card Type</label>
-        <div class="cat-pills" id="card-type-pills">
-          <button class="cat-pill active" data-type="single">Single Card</button>
-          <button class="cat-pill" data-type="carousel">Carousel (multi-card)</button>
-        </div>
-      </div>
+          <!-- Card type -->
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+            <label class="form-label">Card Type</label>
+            <div class="cat-pills" id="card-type-pills" style="margin-bottom:0">
+              <button class="cat-pill active" data-type="single">Single Card</button>
+              <button class="cat-pill" data-type="carousel">Carousel</button>
+            </div>
+          </div>
 
-      <button class="btn btn-primary" id="gen-card-btn" style="margin-bottom:1.5rem">🃏 Generate Card</button>
+          <!-- Carousel slide controls -->
+          <div id="carousel-controls" style="display:none;padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);align-items:center;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm" id="carousel-prev-slide">← Prev</button>
+            <span id="carousel-slide-indicator" style="font-family:var(--font-mono);font-size:11px;color:var(--muted);flex:1;text-align:center"></span>
+            <button class="btn btn-outline btn-sm" id="carousel-next-slide">Next →</button>
+            <button class="btn btn-ghost btn-sm" id="carousel-add-slide">+ Add Slide</button>
+            <button class="btn btn-outline btn-sm" id="carousel-del-slide">Delete</button>
+          </div>
 
-      <!-- Output Area -->
-      <div class="script-output" id="card-output">
-        <div class="script-header">
-          <span class="script-label">🃏 Social Card</span>
-          <div class="script-header-right">
-            <button class="btn btn-outline btn-sm" id="download-card-btn" style="display:none">⬇ Download Card</button>
+          <!-- Content fields -->
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+            <div class="form-row">
+              <label class="form-label">Category</label>
+              <select class="form-select" id="cd-category">
+                <option value="news">News</option>
+                <option value="politics">Politics</option>
+                <option value="sport">Sport</option>
+                <option value="business">Business</option>
+                <option value="technology">Technology</option>
+                <option value="entertainment">Entertainment</option>
+                <option value="motoring">Motoring</option>
+                <option value="lifestyle">Lifestyle</option>
+                <option value="travel">Travel</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Kicker (short label)</label>
+              <input class="form-input" id="cd-kicker" placeholder="e.g. BREAKING NEWS" maxlength="40" value="BREAKING NEWS" />
+            </div>
+            <div class="form-row">
+              <label class="form-label">Headline</label>
+              <textarea class="form-textarea" id="cd-headline" rows="3" placeholder="Story headline...">Your story headline goes here</textarea>
+            </div>
+            <div class="form-row" style="margin-bottom:0">
+              <label class="form-label">Caption / Key Detail</label>
+              <textarea class="form-textarea" id="cd-caption" rows="2" placeholder="Caption or key fact...">Add a caption or key detail about this story.</textarea>
+            </div>
+          </div>
+
+          <!-- Image -->
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+            <label class="form-label">Story Image URL</label>
+            <input class="form-input" id="cd-imgurl" placeholder="https://iol-prod.appspot.com/image/..." />
+            <p style="font-size:10px;color:var(--muted);margin-top:6px;font-family:var(--font-mono)">Drag the image on the canvas to reposition · Scroll to zoom</p>
+          </div>
+
+          <!-- AI generate -->
+          <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+            <button class="btn btn-primary" id="cd-generate-btn" style="width:100%">✨ AI Generate Card Copy</button>
+          </div>
+
+          <!-- Share text -->
+          <div style="padding:1rem 1.25rem">
+            <label class="form-label">Social Sharing Text</label>
+            <textarea class="form-textarea" id="cd-share-text" rows="4" placeholder="AI-generated share text will appear here..." style="font-size:12px"></textarea>
+            <button class="copy-btn" data-target="cd-share-text" style="margin-top:8px">Copy</button>
           </div>
         </div>
-        <div class="loading-inline" id="card-loading" style="display:none">
-          <div class="spinner"></div>
-          <span class="generating-text">Generating card...</span>
-        </div>
-        <div class="error-msg" id="card-error" style="display:none"></div>
-        <div class="script-placeholder" id="card-placeholder">
-          <span class="placeholder-icon">🃏</span>
-          <p>Select a story and click <strong>Generate Card</strong></p>
-        </div>
 
-        <!-- Canva result area -->
-        <div id="card-canvas-area" style="display:none;padding:1.5rem">
-          <div id="carousel-nav" style="display:none"></div>
-          <canvas id="card-canvas" style="display:none"></canvas>
-          <button id="download-card-btn" style="display:none"></button>
-
-          <!-- Social sharing text -->
-          <div id="share-text-area" style="margin-top:1rem">
-            <div class="script-header" style="border-radius:3px 3px 0 0;background:var(--gray3)">
-              <span class="script-label">📤 Social Sharing Text</span>
-              <div class="script-header-right">
-                <button class="copy-btn" data-target="share-text-output">Copy</button>
+        <!-- ── RIGHT PANEL: Canvas preview ── -->
+        <div style="position:sticky;top:80px">
+          <div style="background:var(--gray2);border:1px solid var(--border);border-radius:4px;overflow:hidden">
+            <div style="background:var(--gray3);padding:10px 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--red);letter-spacing:2px;text-transform:uppercase">Card Preview</span>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-outline btn-sm" id="cd-download-btn">⬇ Download</button>
+                <button class="btn btn-outline btn-sm" id="cd-download-all-btn">⬇ All Slides</button>
               </div>
             </div>
-            <div id="share-text-output" class="script-body" style="border-radius:0 0 3px 3px;max-height:200px"></div>
+            <!-- Canvas -->
+            <div style="padding:1rem;background:repeating-conic-gradient(#1a1a1a 0% 25%,#111 0% 50%) 0 0/20px 20px;display:flex;justify-content:center">
+              <canvas id="card-canvas-draw"
+                style="max-width:100%;aspect-ratio:1;border-radius:4px;cursor:grab;box-shadow:0 8px 40px rgba(0,0,0,0.6);display:block"
+                title="Drag to reposition image · Scroll to zoom">
+              </canvas>
+            </div>
+            <div style="padding:10px 1.25rem;border-top:1px solid var(--border)">
+              <p style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin:0">
+                1080×1080px · PNG download · IOL branding locked · Drag to reposition photo
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+
+      </div><!-- end grid -->
     </div>
   </section>
+
 
   <!-- FOOTER -->
   <footer class="footer">
