@@ -528,14 +528,29 @@ function escAttr(s){ return escHtml(s); }
 loadStories(false);
 
 /* ============================================================
-   SOCIAL CARD CREATOR v5
-   - Browser calls Claude API to generate card text (no mcp_servers)
-   - Browser calls worker /canva/card to do Canva editing server-side
-   - Worker uses CANVA_TOKEN env var to call Canva REST API
+   SOCIAL CARD CREATOR v6
+   Architecture:
+   1. Claude API generates card copy (kicker, headline, share text)
+   2. Worker /shorten shortens the URL
+   3. App shows generated copy + deep link to open the right
+      Canva template page so user can paste in and download
+   No Canva token needed. Works immediately.
    ============================================================ */
+
+// Template page URLs — each category maps to the correct page
+const CANVA_SINGLE_CARD_URL = 'https://www.canva.com/design/DAGsALPE-hs/edit';
+const CANVA_CAROUSEL_URL    = 'https://www.canva.com/design/DAG5Z_3B2HU/edit';
+
+// Category → page number in single card template (DAGsALPE-hs)
+const CAT_TO_PAGE = {
+  news:1, politics:1, business:2, technology:7,
+  entertainment:4, lifestyle:4, sport:5,
+  travel:6, motoring:8, default:1,
+};
 
 let currentCardType = 'single';
 
+/* ── Populate story selector ── */
 document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     if (tab.dataset.tab === 'cards') populateCardStorySelector();
@@ -585,11 +600,6 @@ document.getElementById('gen-card-btn').addEventListener('click', async () => {
   const apiKey = getApiKey();
   if (!apiKey) { showSettingsAlert(); return; }
 
-  if (!WORKER_BASE_URL) {
-    alert('Please configure your Cloudflare Worker URL in app.js (WORKER_BASE_URL).');
-    return;
-  }
-
   const selVal   = document.getElementById('card-story-select').value;
   let headline   = document.getElementById('card-headline').value.trim();
   let caption    = document.getElementById('card-caption').value.trim();
@@ -603,15 +613,21 @@ document.getElementById('gen-card-btn').addEventListener('click', async () => {
   }
   if (!headline) { alert('Please select a story or enter a headline.'); return; }
 
-  showCardState('loading', currentCardType === 'carousel' ? 'Building carousel in Canva...' : 'Building card in Canva...');
+  // Show loading
+  document.getElementById('card-placeholder').style.display  = 'none';
+  document.getElementById('card-canvas-area').style.display  = 'none';
+  document.getElementById('card-error').style.display        = 'none';
+  document.getElementById('card-loading').style.display      = 'flex';
+  const gt = document.getElementById('card-loading').querySelector('.generating-text');
+  if (gt) gt.textContent = 'Generating card content...';
 
   try {
-    // Step 1: Generate card copy with Claude API (no mcp_servers needed)
-    const cardCopy = await generateCardCopy(apiKey, headline, caption, category, currentCardType);
+    // Step 1: Generate card copy with Claude
+    const copy = await generateCardCopy(apiKey, headline, caption, category, currentCardType);
 
-    // Step 2: Shorten URL via worker
+    // Step 2: Shorten URL
     let shortUrl = storyUrl;
-    if (storyUrl) {
+    if (storyUrl && WORKER_BASE_URL) {
       try {
         const sr = await fetch(WORKER_BASE_URL.replace(/\/$/,'') + '/shorten?url=' + encodeURIComponent(storyUrl));
         const sd = await sr.json();
@@ -619,101 +635,93 @@ document.getElementById('gen-card-btn').addEventListener('click', async () => {
       } catch(_) {}
     }
 
-    // Step 3: Call worker /canva/card to create the card in Canva
-    const workerRes = await fetch(WORKER_BASE_URL.replace(/\/$/,'') + '/canva/card', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type:      currentCardType,
-        category,
-        kicker:    cardCopy.kicker    || headline.split(' ').slice(0,3).join(' ').toUpperCase(),
-        headline:  cardCopy.headline  || headline,
-        bodyText:  cardCopy.caption   || caption,
-        imageUrl:  imageUrl           || '',
-        slides:    cardCopy.slides    || [],
-      }),
-    });
-
-    const result = await workerRes.json();
-
-    if (!result.ok) {
-      // If CANVA_TOKEN not set, show helpful message with instructions
-      if (result.error && result.error.includes('CANVA_TOKEN')) {
-        showCardState('token-missing');
-        return;
-      }
-      throw new Error(result.error || 'Worker returned an error');
-    }
+    // Step 3: Build Canva template URL for the right page/category
+    const isCarousel = currentCardType === 'carousel';
+    const page       = isCarousel ? 1 : (CAT_TO_PAGE[category] || 1);
+    const canvaUrl   = (isCarousel ? CANVA_CAROUSEL_URL : CANVA_SINGLE_CARD_URL) + '?page=' + page;
 
     // Step 4: Show result
-    showCardState('result', '', result, headline, cardCopy.shareText || headline, shortUrl || storyUrl, category);
+    document.getElementById('card-loading').style.display = 'none';
+    document.getElementById('card-canvas-area').style.display = 'block';
+
+    let resultEl = document.getElementById('canva-card-result');
+    if (!resultEl) {
+      resultEl = document.createElement('div');
+      resultEl.id = 'canva-card-result';
+      document.getElementById('card-canvas-area').appendChild(resultEl);
+    }
+
+    const slides = copy.slides || [];
+    const slidesHtml = isCarousel && slides.length ? `
+      <div style="margin-top:1.5rem">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);letter-spacing:2px;margin-bottom:10px">CAROUSEL SLIDES</div>
+        ${slides.map((s,i) => `
+          <div style="background:var(--gray3);border-radius:3px;padding:12px 14px;margin-bottom:8px;border-left:3px solid var(--red)">
+            <div style="font-size:10px;font-family:var(--font-mono);color:var(--muted);margin-bottom:4px">SLIDE ${i+1}</div>
+            <div style="font-weight:700;font-size:13px;color:var(--white);margin-bottom:3px">${escHtml(s.kicker||'')}</div>
+            <div style="font-size:12px;color:#ccc">${escHtml(s.headline||'')}${s.body?' — '+escHtml(s.body):''}</div>
+          </div>`).join('')}
+      </div>` : '';
+
+    resultEl.innerHTML = `
+      <div style="padding:1.25rem 0">
+        <div style="background:var(--gray3);border-radius:3px;padding:1rem 1.25rem;margin-bottom:1rem">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--red);letter-spacing:2px;margin-bottom:8px">CARD COPY</div>
+          <div style="display:grid;gap:8px">
+            <div>
+              <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-bottom:3px">KICKER</div>
+              <div style="font-weight:800;font-size:16px;color:var(--white);letter-spacing:1px">${escHtml(copy.kicker||'')}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-bottom:3px">HEADLINE</div>
+              <div style="font-weight:600;font-size:14px;color:var(--white)">${escHtml(copy.headline||headline)}</div>
+            </div>
+            ${copy.caption ? `<div>
+              <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);margin-bottom:3px">CAPTION</div>
+              <div style="font-size:13px;color:#ccc">${escHtml(copy.caption)}</div>
+            </div>` : ''}
+          </div>
+          ${slidesHtml}
+        </div>
+
+        ${imageUrl ? `<div style="background:var(--gray3);border-radius:3px;padding:10px 14px;margin-bottom:1rem;font-size:11px;font-family:var(--font-mono);color:var(--muted)">
+          <span style="color:var(--white)">Story image:</span> <a href="${escHtml(imageUrl)}" target="_blank" style="color:var(--red);word-break:break-all">${escHtml(imageUrl)}</a>
+        </div>` : ''}
+
+        <div style="text-align:center;padding:0.5rem 0 1rem">
+          <a href="${escHtml(canvaUrl)}" target="_blank" 
+             style="background:var(--red);color:#fff;padding:11px 28px;border-radius:2px;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;display:inline-block">
+            Open Canva Template (Page ${page}) →
+          </a>
+          <p style="margin-top:10px;font-size:11px;color:var(--muted);font-family:var(--font-mono);line-height:1.7">
+            Template opens on the correct page for <strong style="color:var(--white)">${escHtml(category)}</strong> stories.<br>
+            Paste the kicker, headline${imageUrl?' and upload the story image':''} — then download.
+          </p>
+        </div>
+      </div>`;
+
+    // Share text
+    document.getElementById('share-text-output').textContent =
+      buildShareText(headline, copy.shareText || headline, shortUrl || storyUrl, category);
 
   } catch(e) {
-    showCardState('error', e.message);
+    document.getElementById('card-loading').style.display = 'none';
+    document.getElementById('card-error').textContent = 'Error: ' + e.message;
+    document.getElementById('card-error').style.display = 'block';
+    document.getElementById('card-placeholder').style.display = 'block';
   }
 });
 
-/* ── Generate card copy text (Claude API, no MCP) ── */
+/* ── Generate card copy ── */
 async function generateCardCopy(apiKey, headline, caption, category, type) {
-  const isCarousel = type === 'carousel';
-  const prompt = isCarousel
-    ? 'IOL social media editor. Break this story into 4-6 carousel slides.\nStory: ' + headline + '\nDetails: ' + caption + '\nReturn ONLY raw JSON (no markdown): {"kicker":"2-4 WORD ALL-CAPS","shareText":"2-3 sentence social caption","slides":[{"kicker":"2-3 WORD KICKER","headline":"max 10 words","body":"one key fact"},...]}'
-    : 'IOL social media editor. Write card text for this story.\nStory: ' + headline + '\nDetails: ' + caption + '\nCategory: ' + category + '\nReturn ONLY raw JSON (no markdown): {"kicker":"2-4 WORD ALL-CAPS KICKER like FACILITY FAILURES or URBAN SPARK","headline":"punchy headline max 10 words","caption":"one compelling sentence max 18 words","shareText":"2-3 sentence social caption with hook"}';
-
+  const isC  = type === 'carousel';
+  const prompt = isC
+    ? 'IOL social media editor. Break this story into 4-6 carousel slides.\nStory: '+headline+'\nDetails: '+caption+'\nReturn ONLY raw JSON (no markdown): {"kicker":"2-4 WORD ALL-CAPS","shareText":"2-3 sentence caption with hook","slides":[{"kicker":"2-3 WORD KICKER","headline":"max 10 words","body":"one key fact"},...]}'
+    : 'IOL social media editor. Write card copy.\nStory: '+headline+'\nDetails: '+caption+'\nCategory: '+category+'\nReturn ONLY raw JSON (no markdown): {"kicker":"2-4 WORD ALL-CAPS like FACILITY FAILURES or URBAN SPARK","headline":"punchy headline max 10 words","caption":"one compelling sentence max 18 words","shareText":"2-3 sentence social caption ending with hook"}';
   const raw = await callClaude(apiKey, prompt, 600);
   const m   = raw.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/);
-  if (!m) return { kicker: headline.split(' ').slice(0,3).join(' ').toUpperCase(), headline, shareText: headline };
-  try { return JSON.parse(m[0]); } catch(_) { return { kicker:'BREAKING', headline, shareText: headline }; }
-}
-
-/* ── Card UI states ── */
-function showCardState(state, msg, result, headline, shareText, shortUrl, category) {
-  document.getElementById('card-loading').style.display     = 'none';
-  document.getElementById('card-placeholder').style.display = 'none';
-  document.getElementById('card-error').style.display       = 'none';
-  document.getElementById('card-canvas-area').style.display = 'none';
-
-  if (state === 'loading') {
-    document.getElementById('card-loading').style.display = 'flex';
-    const gt = document.getElementById('card-loading').querySelector('.generating-text');
-    if (gt) gt.textContent = msg || 'Building card...';
-
-  } else if (state === 'error') {
-    document.getElementById('card-error').textContent = 'Error: ' + msg;
-    document.getElementById('card-error').style.display = 'block';
-    document.getElementById('card-placeholder').style.display = 'block';
-
-  } else if (state === 'token-missing') {
-    document.getElementById('card-error').innerHTML =
-      '<strong style="color:#ffd060">⚠ Canva API token not configured.</strong><br><br>' +
-      'To enable card creation, add your Canva API token to your Cloudflare Worker:<br><br>' +
-      '1. Go to <a href="https://www.canva.com/developers/apps" target="_blank" style="color:#E8192C">canva.com/developers/apps</a> → create an app → copy the Personal Access Token<br>' +
-      '2. In your <a href="https://dash.cloudflare.com" target="_blank" style="color:#E8192C">Cloudflare Worker dashboard</a> → Settings → Variables → add: <code>CANVA_TOKEN</code><br>' +
-      '3. Paste your token as the value → Save → Redeploy the worker';
-    document.getElementById('card-error').style.display = 'block';
-
-  } else if (state === 'result') {
-    document.getElementById('card-canvas-area').style.display = 'block';
-    let linkEl = document.getElementById('canva-edit-link');
-    if (!linkEl) {
-      linkEl = document.createElement('div');
-      linkEl.id = 'canva-edit-link';
-      linkEl.style.cssText = 'text-align:center;padding:1.5rem 1rem';
-      document.getElementById('card-canvas-area').appendChild(linkEl);
-    }
-    const thumbHtml = result.thumbnailUrl
-      ? '<img src="' + result.thumbnailUrl + '" style="max-width:100%;max-height:420px;border-radius:6px;margin-bottom:1.25rem;box-shadow:0 4px 24px rgba(0,0,0,0.5);display:block;margin-left:auto;margin-right:auto" />'
-      : '';
-    const btnHtml = result.editUrl
-      ? '<a href="' + result.editUrl + '" target="_blank" class="btn btn-primary" style="font-size:12px;padding:11px 24px;text-decoration:none;display:inline-block">Open &amp; Download in Canva →</a>'
-      : '<p style="color:var(--muted);font-size:12px">Card created — check your Canva account</p>';
-    linkEl.innerHTML = thumbHtml + btnHtml + '<p style="margin-top:8px;font-size:10px;color:var(--muted);font-family:var(--font-mono)">Saved to your Canva account</p>';
-
-    // Share text
-    if (shareText) {
-      document.getElementById('share-text-output').textContent = buildShareText(headline, shareText, shortUrl, category);
-    }
-  }
+  if (!m) return { kicker:headline.split(' ').slice(0,3).join(' ').toUpperCase(), headline, shareText:headline };
+  try { return JSON.parse(m[0]); } catch(_) { return { kicker:'BREAKING', headline, shareText:headline }; }
 }
 
 /* ── Share text ── */
@@ -723,3 +731,5 @@ function buildShareText(headline, aiText, shortUrl, category) {
   const url = shortUrl ? '\n\n\uD83D\uDD17 ' + shortUrl : '';
   return (aiText || headline) + url + '\n\n' + ht + '\n\n\uD83D\uDCF0 Follow @IOL for the latest South African news';
 }
+
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

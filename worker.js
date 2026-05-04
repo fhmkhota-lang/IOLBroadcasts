@@ -105,6 +105,11 @@ export default {
       } catch(e) { return json({ ok:false, error:e.message }, 500); }
     }
 
+    // ── Unknown paths ──────────────────────────────────────────────
+    if (section.includes('/') && !['canva/upload','canva/card'].includes(section)) {
+      return json({ ok:false, error:'Unknown endpoint: ' + section }, 404);
+    }
+
     // ── RSS feeds ──────────────────────────────────────────────────
     try {
       if (section === 'all') {
