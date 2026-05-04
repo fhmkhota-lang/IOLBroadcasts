@@ -39,6 +39,9 @@
     <button class="nav-tab" data-tab="podcast">
       <span class="nav-icon">🎙</span> Podcast Generator
     </button>
+    <button class="nav-tab" data-tab="cards">
+      <span class="nav-icon">🃏</span> Social Cards
+    </button>
 
   </nav>
 
@@ -349,6 +352,116 @@
           <p>Configure your podcast above and click <strong>Generate Podcast Concept</strong></p>
         </div>
         <div class="podcast-body" id="podcast-body" style="display:none"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ===== PANEL: SOCIAL CARDS ===== -->
+  <section id="panel-cards" class="panel">
+    <div class="panel-inner">
+      <div class="section-header">
+        <h2 class="section-title">Social Media Card Creator</h2>
+        <p class="section-sub">Generate branded IOL cards for social media — single card or full carousel</p>
+      </div>
+
+      <!-- Story Selector -->
+      <div class="form-row">
+        <label class="form-label">Select a Story</label>
+        <select class="form-select" id="card-story-select">
+          <option value="">— Choose a story from today's feed —</option>
+        </select>
+      </div>
+
+      <!-- Or paste custom -->
+      <div id="card-custom-fields" style="display:none">
+        <div class="form-grid-2" style="margin-top:0.5rem">
+          <div class="form-row">
+            <label class="form-label">Headline</label>
+            <input class="form-input" id="card-headline" placeholder="Story headline..." />
+          </div>
+          <div class="form-row">
+            <label class="form-label">Category</label>
+            <select class="form-select" id="card-category">
+              <option value="news">News</option>
+              <option value="politics">Politics</option>
+              <option value="sport">Sport</option>
+              <option value="business">Business</option>
+              <option value="entertainment">Entertainment</option>
+              <option value="technology">Technology</option>
+              <option value="motoring">Motoring</option>
+              <option value="lifestyle">Lifestyle</option>
+              <option value="travel">Travel</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Caption / Body Text</label>
+          <textarea class="form-textarea" id="card-caption" rows="3" placeholder="Card caption text..."></textarea>
+        </div>
+        <div class="form-row">
+          <label class="form-label">Image URL (optional)</label>
+          <input class="form-input" id="card-image-url" placeholder="https://..." />
+        </div>
+        <div class="form-row">
+          <label class="form-label">Story URL (for sharing link)</label>
+          <input class="form-input" id="card-story-url" placeholder="https://iol.co.za/..." />
+        </div>
+      </div>
+
+      <!-- Card Type Selector -->
+      <div class="form-row" style="margin-top:1rem">
+        <label class="form-label">Card Type</label>
+        <div class="cat-pills" id="card-type-pills">
+          <button class="cat-pill active" data-type="single">Single Card</button>
+          <button class="cat-pill" data-type="carousel">Carousel (multi-card)</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="gen-card-btn" style="margin-bottom:1.5rem">🃏 Generate Card</button>
+
+      <!-- Output Area -->
+      <div class="script-output" id="card-output">
+        <div class="script-header">
+          <span class="script-label">🃏 Social Card</span>
+          <div class="script-header-right">
+            <button class="btn btn-outline btn-sm" id="download-card-btn" style="display:none">⬇ Download Card</button>
+          </div>
+        </div>
+        <div class="loading-inline" id="card-loading" style="display:none">
+          <div class="spinner"></div>
+          <span class="generating-text">Generating card...</span>
+        </div>
+        <div class="error-msg" id="card-error" style="display:none"></div>
+        <div class="script-placeholder" id="card-placeholder">
+          <span class="placeholder-icon">🃏</span>
+          <p>Select a story and click <strong>Generate Card</strong></p>
+        </div>
+
+        <!-- Canvas output -->
+        <div id="card-canvas-area" style="display:none;padding:1.5rem">
+          <!-- Carousel nav -->
+          <div id="carousel-nav" style="display:none;align-items:center;gap:12px;margin-bottom:1rem">
+            <button class="btn btn-outline btn-sm" id="carousel-prev">← Prev</button>
+            <span id="carousel-indicator" style="font-family:var(--font-mono);font-size:11px;color:var(--muted)"></span>
+            <button class="btn btn-outline btn-sm" id="carousel-next">Next →</button>
+            <button class="btn btn-outline btn-sm" id="download-all-btn">⬇ Download All</button>
+          </div>
+          <div style="display:flex;justify-content:center">
+            <canvas id="card-canvas" style="max-width:100%;border-radius:4px;box-shadow:0 4px 24px rgba(0,0,0,0.4)"></canvas>
+          </div>
+
+          <!-- Social sharing text -->
+          <div id="share-text-area" style="margin-top:1.5rem">
+            <div class="script-header" style="border-radius:3px 3px 0 0;background:var(--gray3)">
+              <span class="script-label">📤 Social Sharing Text</span>
+              <div class="script-header-right">
+                <button class="copy-btn" data-target="share-text-output">Copy</button>
+              </div>
+            </div>
+            <div id="share-text-output" class="script-body" style="border-radius:0 0 3px 3px;max-height:200px"></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>

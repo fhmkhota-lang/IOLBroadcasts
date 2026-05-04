@@ -526,3 +526,548 @@ function escAttr(s){ return escHtml(s); }
    INIT
    ============================================================ */
 loadStories(false);
+
+/* ============================================================
+   SOCIAL CARD CREATOR
+   Generates branded IOL cards matching the Canva templates:
+   - Single Card: full-bleed photo, dark overlay, bold white
+     headline + caption centered, IOL logo + category pill
+   - Carousel: landscape 4:3, IOL logo top-left, kicker box
+     lower-left, headline bottom-right, underline rule
+   ============================================================ */
+
+const CAT_COLOURS = {
+  news:          '#E8192C',
+  politics:      '#E8192C',
+  sport:         '#00A651',
+  business:      '#0066CC',
+  entertainment: '#E8192C',
+  technology:    '#0066CC',
+  motoring:      '#F26522',
+  lifestyle:     '#E91E8C',
+  travel:        '#F5A623',
+  default:       '#E8192C',
+};
+
+function catColour(cat) {
+  return CAT_COLOURS[(cat||'').toLowerCase()] || CAT_COLOURS.default;
+}
+
+// IOL logo as inline SVG rendered to canvas
+const IOL_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="120" height="60">
+  <polygon points="0,0 0,48 20,0" fill="#E8192C"/>
+  <text x="22" y="46" font-family="Arial Black,sans-serif" font-weight="900" font-size="52" fill="white">IOL</text>
+</svg>`;
+
+let iolLogoImg = null;
+function getLogoImg() {
+  return new Promise(resolve => {
+    if (iolLogoImg) { resolve(iolLogoImg); return; }
+    const img = new Image();
+    const blob = new Blob([IOL_LOGO_SVG], { type: 'image/svg+xml' });
+    img.onload  = () => { iolLogoImg = img; URL.revokeObjectURL(img.src); resolve(img); };
+    img.onerror = () => resolve(null);
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+// State for carousel
+let carouselSlides   = [];
+let carouselIndex    = 0;
+let currentCardType  = 'single';
+
+/* ---- Populate story selector when cards tab activates ---- */
+document.querySelectorAll('.nav-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    if (tab.dataset.tab === 'cards') populateCardStorySelector();
+  });
+});
+
+function populateCardStorySelector() {
+  const sel = document.getElementById('card-story-select');
+  // Clear existing except placeholder
+  while (sel.options.length > 1) sel.remove(1);
+
+  // Add "custom" option
+  const customOpt = document.createElement('option');
+  customOpt.value = '__custom__';
+  customOpt.textContent = '✏ Enter custom story details';
+  sel.appendChild(customOpt);
+
+  allStories.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value       = s.id;
+    opt.textContent = `[${s.cat.toUpperCase()}] ${s.headline.slice(0, 80)}`;
+    sel.appendChild(opt);
+  });
+}
+
+document.getElementById('card-story-select').addEventListener('change', function() {
+  const custom = document.getElementById('card-custom-fields');
+  if (this.value === '__custom__') {
+    custom.style.display = 'block';
+  } else {
+    custom.style.display = 'none';
+    // Pre-fill hidden fields from story data
+    if (this.value) {
+      const s = allStories.find(x => x.id === this.value);
+      if (s) {
+        document.getElementById('card-headline').value   = s.headline;
+        document.getElementById('card-caption').value    = s.excerpt;
+        document.getElementById('card-image-url').value  = s.image || '';
+        document.getElementById('card-story-url').value  = s.url || '';
+        document.getElementById('card-category').value   = s.cat;
+      }
+    }
+  }
+});
+
+// Card type toggle
+document.getElementById('card-type-pills').addEventListener('click', e => {
+  if (e.target.classList.contains('cat-pill')) {
+    document.querySelectorAll('#card-type-pills .cat-pill').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    currentCardType = e.target.dataset.type;
+  }
+});
+
+/* ---- MAIN GENERATE HANDLER ---- */
+document.getElementById('gen-card-btn').addEventListener('click', async () => {
+  const apiKey = getApiKey();
+  if (!apiKey) { showSettingsAlert(); return; }
+
+  // Get story data
+  const selVal   = document.getElementById('card-story-select').value;
+  let headline   = document.getElementById('card-headline').value.trim();
+  let caption    = document.getElementById('card-caption').value.trim();
+  let imageUrl   = document.getElementById('card-image-url').value.trim();
+  let storyUrl   = document.getElementById('card-story-url').value.trim();
+  let category   = document.getElementById('card-category').value;
+
+  if (selVal && selVal !== '__custom__' && selVal !== '') {
+    const s = allStories.find(x => x.id === selVal);
+    if (s) {
+      headline = s.headline; caption = s.excerpt;
+      imageUrl = s.image || ''; storyUrl = s.url || ''; category = s.cat;
+    }
+  }
+
+  if (!headline) { alert('Please select a story or enter a headline.'); return; }
+
+  // Show loading
+  document.getElementById('card-placeholder').style.display  = 'none';
+  document.getElementById('card-canvas-area').style.display  = 'none';
+  document.getElementById('card-error').style.display        = 'none';
+  document.getElementById('card-loading').style.display      = 'flex';
+
+  try {
+    // 1. Use Claude to generate polished card text + carousel slides
+    const cardContent = await generateCardContent(apiKey, headline, caption, category, currentCardType);
+
+    // 2. Shorten the URL
+    let shortUrl = storyUrl;
+    if (storyUrl) {
+      try {
+        const sr = await fetch(`${WORKER_BASE_URL.replace(/\/$/,'')}/shorten?url=${encodeURIComponent(storyUrl)}`);
+        const sd = await sr.json();
+        if (sd.ok && sd.short) shortUrl = sd.short;
+      } catch (_) {}
+    }
+
+    // 3. Draw the card(s)
+    if (currentCardType === 'carousel') {
+      carouselSlides = cardContent.slides || [];
+      carouselIndex  = 0;
+      await drawCarouselSlide(carouselSlides[0], imageUrl, category);
+      setupCarouselNav(imageUrl, category);
+    } else {
+      await drawSingleCard(cardContent.headline, cardContent.caption, imageUrl, category);
+    }
+
+    // 4. Generate share text
+    const shareText = buildShareText(cardContent.headline, cardContent.shareText, shortUrl || storyUrl, category);
+    document.getElementById('share-text-output').textContent = shareText;
+
+    document.getElementById('card-loading').style.display    = 'none';
+    document.getElementById('card-canvas-area').style.display = 'block';
+    document.getElementById('download-card-btn').style.display = 'inline-flex';
+
+  } catch(e) {
+    document.getElementById('card-loading').style.display = 'none';
+    document.getElementById('card-error').textContent = 'Error: ' + e.message;
+    document.getElementById('card-error').style.display = 'block';
+    document.getElementById('card-placeholder').style.display = 'block';
+  }
+});
+
+/* ---- CLAUDE: generate polished card text ---- */
+async function generateCardContent(apiKey, headline, caption, category, type) {
+  const isCarousel = type === 'carousel';
+  const prompt = isCarousel
+    ? `You are an IOL social media editor. Break this story into a carousel of 4-6 cards for Instagram/TikTok.
+
+Story headline: ${headline}
+Story details: ${caption}
+Category: ${category}
+
+Return ONLY raw JSON (no markdown):
+{
+  "headline": "snappy kicker title for the whole carousel (2-4 words, ALL CAPS)",
+  "shareText": "social media caption for sharing (2-3 sentences, engaging, ends with a hook)",
+  "slides": [
+    { "kicker": "2-3 WORD KICKER", "headline": "Full slide headline (max 12 words)", "body": "One sentence of context for this slide" },
+    ...
+  ]
+}
+Each slide covers one key point of the story. Keep kickers short and punchy. Headlines factual and clear.`
+    : `You are an IOL social media editor. Write polished card text for this story.
+
+Story headline: ${headline}
+Story details: ${caption}
+Category: ${category}
+
+Return ONLY raw JSON (no markdown):
+{
+  "headline": "Punchy card headline — max 10 words, bold and clear",
+  "caption": "One compelling sentence that adds context or the most surprising detail — max 20 words",
+  "shareText": "Social media caption for sharing this card (2-3 sentences, engaging, conversational, ends with a question or hook)"
+}`;
+
+  const raw  = await callClaude(apiKey, prompt, 800);
+  const m    = raw.replace(/```json|```/g,'').trim().match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('Invalid card content response');
+  return JSON.parse(m[0]);
+}
+
+/* ================================================================
+   SINGLE CARD — matches Copy_of_New_Card_Designs.pdf
+   Square 1080×1080, full-bleed photo, dark overlay,
+   bold white headline + caption centred, IOL logo + pill at bottom
+   ================================================================ */
+async function drawSingleCard(headline, caption, imageUrl, category) {
+  const canvas  = document.getElementById('card-canvas');
+  const SIZE    = 1080;
+  canvas.width  = SIZE;
+  canvas.height = SIZE;
+  const ctx     = canvas.getContext('2d');
+  const colour  = catColour(category);
+
+  // Background
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Photo background
+  if (imageUrl) {
+    try {
+      const img = await loadImage(imageUrl);
+      // Cover-fit
+      const scale = Math.max(SIZE / img.width, SIZE / img.height);
+      const w     = img.width  * scale;
+      const h     = img.height * scale;
+      ctx.drawImage(img, (SIZE - w) / 2, (SIZE - h) / 2, w, h);
+    } catch(_) {}
+  }
+
+  // Dark gradient overlay (stronger at bottom for text legibility)
+  const grad = ctx.createLinearGradient(0, 0, 0, SIZE);
+  grad.addColorStop(0,   'rgba(0,0,0,0.35)');
+  grad.addColorStop(0.45,'rgba(0,0,0,0.45)');
+  grad.addColorStop(1,   'rgba(0,0,0,0.72)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // ── Text block centred ───────────────────────────────────────────
+  const padX    = 80;
+  const maxW    = SIZE - padX * 2;
+  const centerX = SIZE / 2;
+
+  // Headline — bold, large
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font         = 'bold 72px "Arial Black", Arial, sans-serif';
+  const hlLines = wrapText(ctx, headline, maxW);
+  const hlLineH = 82;
+  const hlTotalH = hlLines.length * hlLineH;
+
+  // Caption — lighter, smaller
+  ctx.font = '42px Arial, sans-serif';
+  const capLines = wrapText(ctx, caption || '', maxW - 40);
+  const capLineH = 54;
+  const capTotalH = capLines.length * capLineH;
+
+  const gap       = 28;
+  const logoArea  = 100;
+  const totalBlock= hlTotalH + (capLines.length ? gap + capTotalH : 0);
+  const blockTop  = (SIZE - totalBlock - logoArea) / 2;
+
+  // Draw headline
+  ctx.font      = 'bold 72px "Arial Black", Arial, sans-serif';
+  ctx.fillStyle = '#FFFFFF';
+  hlLines.forEach((line, i) => {
+    ctx.fillText(line, centerX, blockTop + (i + 1) * hlLineH);
+  });
+
+  // Draw caption
+  if (capLines.length) {
+    ctx.font      = '42px Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    capLines.forEach((line, i) => {
+      ctx.fillText(line, centerX, blockTop + hlTotalH + gap + (i + 1) * capLineH);
+    });
+  }
+
+  // ── IOL Logo + category pill at bottom centre ────────────────────
+  await drawBottomBadge(ctx, SIZE, category, colour, 'center');
+}
+
+/* ================================================================
+   CAROUSEL SLIDE — matches Carousel_Template.pdf
+   Landscape 1200×900 (4:3), IOL logo top-left, kicker box
+   lower-left, bold headline bottom-right, coloured rule line
+   ================================================================ */
+async function drawCarouselSlide(slide, imageUrl, category) {
+  const canvas  = document.getElementById('card-canvas');
+  const W = 1200, H = 900;
+  canvas.width  = W;
+  canvas.height = H;
+  const ctx     = canvas.getContext('2d');
+  const colour  = catColour(category);
+
+  // Background
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+
+  // Photo
+  if (imageUrl) {
+    try {
+      const img   = await loadImage(imageUrl);
+      const scale = Math.max(W / img.width, H / img.height);
+      const w     = img.width  * scale;
+      const h     = img.height * scale;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    } catch(_) {}
+  }
+
+  // Overlay
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   'rgba(0,0,0,0.25)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.40)');
+  grad.addColorStop(1,   'rgba(0,0,0,0.78)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── IOL Logo + category pill — top left ─────────────────────────
+  await drawTopLeftBadge(ctx, category, colour);
+
+  // ── Kicker box — lower left ──────────────────────────────────────
+  const kicker    = (slide.kicker || '').toUpperCase();
+  const kickerW   = 420;
+  const kickerH   = 72;
+  const kickerX   = 48;
+  const kickerY   = H * 0.56;
+
+  // White outline box with slight fill
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth   = 3;
+  ctx.fillStyle   = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.rect(kickerX, kickerY, kickerW, kickerH);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.textAlign    = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font         = 'bold 32px "Arial Black", Arial, sans-serif';
+  ctx.fillText(kicker, kickerX + 18, kickerY + kickerH / 2, kickerW - 36);
+
+  // ── Headline — bottom right ──────────────────────────────────────
+  const hlText = (slide.headline || '').toUpperCase();
+  const hlMaxW = W * 0.75;
+  const hlX    = W - 60;
+  const hlY    = H - 130;
+
+  ctx.font         = 'bold 44px "Arial Black", Arial, sans-serif';
+  ctx.textAlign    = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle    = '#FFFFFF';
+  const hlLines = wrapText(ctx, hlText, hlMaxW);
+  const hlLineH = 54;
+  hlLines.reverse().forEach((line, i) => {
+    ctx.fillText(line, hlX, hlY - i * hlLineH);
+  });
+
+  // Body text (small, below kicker on left)
+  if (slide.body) {
+    ctx.font         = '28px Arial, sans-serif';
+    ctx.textAlign    = 'left';
+    ctx.fillStyle    = 'rgba(255,255,255,0.88)';
+    ctx.textBaseline = 'top';
+    const bodyLines  = wrapText(ctx, slide.body, 520);
+    bodyLines.slice(0,2).forEach((line, i) => {
+      ctx.fillText(line, kickerX, kickerY + kickerH + 16 + i * 36);
+    });
+  }
+
+  // ── Coloured rule line ────────────────────────────────────────────
+  ctx.strokeStyle = colour;
+  ctx.lineWidth   = 4;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.28, H - 48);
+  ctx.lineTo(W - 60, H - 48);
+  ctx.stroke();
+}
+
+/* ── Helper: draw IOL logo + category pill centred at bottom ── */
+async function drawBottomBadge(ctx, SIZE, category, colour, align) {
+  const logo = await getLogoImg();
+  const cx   = SIZE / 2;
+  const ly   = SIZE - 110;
+
+  if (logo) {
+    const lw = 72, lh = 36;
+    ctx.drawImage(logo, cx - lw/2, ly, lw, lh);
+  } else {
+    // Fallback text IOL
+    ctx.font      = 'bold 40px "Arial Black", Arial, sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textAlign = 'center';
+    // Draw red triangle accent
+    ctx.fillStyle = colour;
+    ctx.beginPath(); ctx.moveTo(cx-38, ly); ctx.lineTo(cx-38, ly+28); ctx.lineTo(cx-20, ly); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('IOL', cx + 4, ly + 28);
+  }
+
+  // Category pill
+  const cat     = (category || 'NEWS').toUpperCase();
+  ctx.font      = 'bold 18px Arial, sans-serif';
+  const pillW   = ctx.measureText(cat).width + 28;
+  const pillH   = 28;
+  const pillX   = cx - pillW / 2;
+  const pillY   = ly + 44;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.rect(pillX, pillY, pillW, pillH);
+  ctx.fill();
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.textAlign    = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cat, cx, pillY + pillH / 2);
+}
+
+/* ── Helper: draw IOL logo + category pill top-left (carousel) ── */
+async function drawTopLeftBadge(ctx, category, colour) {
+  const logo = await getLogoImg();
+  const x    = 40, y = 32;
+  if (logo) {
+    ctx.drawImage(logo, x, y, 80, 40);
+  } else {
+    ctx.fillStyle = colour;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y+32); ctx.lineTo(x+18, y); ctx.closePath(); ctx.fill();
+    ctx.font = 'bold 36px "Arial Black",Arial,sans-serif'; ctx.fillStyle='#fff';
+    ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillText('IOL', x+22, y);
+  }
+
+  // Category pill
+  const cat   = (category || 'NEWS').toUpperCase();
+  ctx.font    = 'bold 16px Arial, sans-serif';
+  ctx.textAlign = 'left';
+  const pillW = ctx.measureText(cat).width + 22;
+  const pillH = 26;
+  const pillX = x;
+  const pillY = y + 48;
+  ctx.fillStyle = colour;
+  ctx.fillRect(pillX, pillY, pillW, pillH);
+  ctx.fillStyle    = '#FFFFFF';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cat, pillX + 11, pillY + pillH / 2);
+}
+
+/* ── Carousel navigation ── */
+function setupCarouselNav(imageUrl, category) {
+  const nav = document.getElementById('carousel-nav');
+  nav.style.display = 'flex';
+  updateCarouselIndicator();
+
+  document.getElementById('carousel-prev').onclick = async () => {
+    if (carouselIndex > 0) { carouselIndex--; await drawCarouselSlide(carouselSlides[carouselIndex], imageUrl, category); updateCarouselIndicator(); }
+  };
+  document.getElementById('carousel-next').onclick = async () => {
+    if (carouselIndex < carouselSlides.length - 1) { carouselIndex++; await drawCarouselSlide(carouselSlides[carouselIndex], imageUrl, category); updateCarouselIndicator(); }
+  };
+  document.getElementById('download-all-btn').onclick = async () => {
+    for (let i = 0; i < carouselSlides.length; i++) {
+      await drawCarouselSlide(carouselSlides[i], imageUrl, category);
+      downloadCanvas(`iol-carousel-slide-${i+1}.png`);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    // Restore current
+    await drawCarouselSlide(carouselSlides[carouselIndex], imageUrl, category);
+  };
+}
+
+function updateCarouselIndicator() {
+  document.getElementById('carousel-indicator').textContent =
+    `Slide ${carouselIndex + 1} of ${carouselSlides.length}`;
+}
+
+/* ── Download single canvas ── */
+document.getElementById('download-card-btn').addEventListener('click', () => downloadCanvas('iol-card.png'));
+
+function downloadCanvas(filename) {
+  const canvas = document.getElementById('card-canvas');
+  const a = document.createElement('a');
+  a.href     = canvas.toDataURL('image/png');
+  a.download = filename;
+  a.click();
+}
+
+/* ── Share text builder ── */
+function buildShareText(headline, aiText, shortUrl, category) {
+  const cat     = (category || 'news').toUpperCase();
+  const hashtags = {
+    news:          '#SouthAfrica #NewsZA #IOL',
+    politics:      '#SouthAfrica #SAPoltics #IOL',
+    sport:         '#SouthAfrica #SportZA #IOL',
+    business:      '#SouthAfrica #BusinessZA #IOL',
+    entertainment: '#SouthAfrica #Entertainment #IOL',
+    technology:    '#SouthAfrica #TechZA #IOL',
+    motoring:      '#SouthAfrica #Motoring #IOL',
+    lifestyle:     '#SouthAfrica #Lifestyle #IOL',
+    travel:        '#SouthAfrica #Travel #IOL',
+  };
+  const tags = hashtags[category] || '#SouthAfrica #IOL';
+  const url  = shortUrl ? `\n\n🔗 ${shortUrl}` : '';
+  return `${aiText || headline}${url}\n\n${tags}\n\n📰 Follow @IOL for the latest South African news`;
+}
+
+/* ── Canvas utilities ── */
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [];
+  const words = text.split(' ');
+  const lines = [];
+  let current = '';
+  words.forEach(word => {
+    const test = current ? current + ' ' + word : word;
+    if (ctx.measureText(test).width <= maxWidth) {
+      current = test;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+  });
+  if (current) lines.push(current);
+  return lines;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload  = () => resolve(img);
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = src;
+    setTimeout(() => reject(new Error('Image timeout')), 8000);
+  });
+}

@@ -639,3 +639,15 @@ body {
 ::-webkit-scrollbar-track { background: var(--gray2); }
 ::-webkit-scrollbar-thumb { background: var(--gray4); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* --- SOCIAL CARD CREATOR --- */
+#card-canvas-area canvas { border-radius: 4px; }
+#card-canvas-area { background: var(--gray2); border-radius: 0 0 3px 3px; }
+#carousel-nav { flex-wrap: wrap; gap: 8px; }
+#share-text-area .script-body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--white);
+}
