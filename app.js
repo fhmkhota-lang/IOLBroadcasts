@@ -648,7 +648,19 @@ if (storySelEl) {
     designer.category  = s.cat      || 'news';
     designer.kicker    = autoKicker(s.headline, s.cat);
     designer.imageUrl  = s.image    || '';
+    designer.storyUrl  = s.url      || '';
+    designer.shortUrl  = '';
     designer.imgOffsetX = 0; designer.imgOffsetY = 0; designer.imgScale = 1;
+
+    // Auto-shorten story URL silently
+    if (s.url && WORKER_BASE_URL) {
+      try {
+        const sr = await fetch(WORKER_BASE_URL.replace(/\/$/,'') + '/shorten?url=' + encodeURIComponent(s.url));
+        const sd = await sr.json();
+        if (sd.ok && sd.short) designer.shortUrl = sd.short;
+      } catch(_) {}
+    }
+
     // Sync UI inputs
     syncUIFromState();
     // Load image
@@ -876,9 +888,15 @@ document.getElementById('cd-download-all-btn')?.addEventListener('click', async 
 function downloadCard(filename) {
   const c = document.getElementById('card-canvas-draw');
   if (!c) return;
-  const a = document.createElement('a');
-  a.href = c.toDataURL('image/png');
-  a.download = filename; a.click();
+  try {
+    const a = document.createElement('a');
+    a.href = c.toDataURL('image/png');
+    a.download = filename; a.click();
+  } catch(e) {
+    // Canvas may be tainted if image has no CORS headers
+    // In that case, right-click → Save image as a workaround
+    alert('To download: right-click the card preview and choose "Save image as".');
+  }
 }
 function downloadCanvas(filename) {
   const c = document.getElementById('card-canvas-draw');
@@ -911,9 +929,14 @@ document.getElementById('cd-generate-btn')?.addEventListener('click', async () =
         const sl=designer.slides[designer.currentSlide];
         sl.kicker=designer.kicker; sl.headline=designer.headline; sl.caption=designer.caption;
       }
-      // Show share text
+      // Show share text with shortened URL
       const shareEl = document.getElementById('cd-share-text');
-      if (shareEl && copy.shareText) shareEl.value = copy.shareText + (designer.imageUrl ? '\n\nImage: ' + designer.imageUrl : '');
+      if (shareEl && copy.shareText) {
+        const urlLine = designer.shortUrl ? '\n\n🔗 ' + designer.shortUrl : (designer.storyUrl ? '\n\n🔗 ' + designer.storyUrl : '');
+        const catTags = { news:'#SouthAfrica #NewsZA #IOL', politics:'#SAPoltics #SouthAfrica #IOL', sport:'#SportZA #SouthAfrica #IOL', business:'#BusinessZA #SouthAfrica #IOL', entertainment:'#Entertainment #SouthAfrica #IOL', technology:'#TechZA #SouthAfrica #IOL', motoring:'#Motoring #SouthAfrica #IOL', lifestyle:'#Lifestyle #SouthAfrica #IOL', travel:'#Travel #SouthAfrica #IOL' };
+        const tags = catTags[designer.category] || '#SouthAfrica #IOL';
+        shareEl.value = copy.shareText + urlLine + '\n\n' + tags + '\n\n📰 Follow @IOL for the latest South African news';
+      }
     }
     renderCard();
   } catch(e) { console.error('Generate copy failed:', e); }
@@ -927,8 +950,9 @@ async function renderCard() {
   if (!canvas) return;
   canvas.width  = SIZE;
   canvas.height = SIZE;
-  const ctx = canvas.getContext('2d');
-  const sl  = currentSlideData();
+  const ctx  = canvas.getContext('2d');
+  const sl   = currentSlideData();
+  const logo = await iolLogo(); // pre-load so draw is synchronous
 
   drawCard(ctx, {
     kicker:     sl.kicker    || designer.kicker    || '',
@@ -939,11 +963,12 @@ async function renderCard() {
     imgOffsetX: sl.imgOffsetX != null ? sl.imgOffsetX : designer.imgOffsetX,
     imgOffsetY: sl.imgOffsetY != null ? sl.imgOffsetY : designer.imgOffsetY,
     imgScale:   sl.imgScale  || designer.imgScale  || 1,
+    logo,
   });
 }
 
 /* ── DRAW FUNCTION — pixel-matches IOL card style ── */
-function drawCard(ctx, data) {
+function drawCard(ctx, data) { // data.logo is pre-loaded IOL logo
   const S   = SIZE;
   const c   = col(data.category);
   const lbl = label(data.category);
@@ -1021,35 +1046,41 @@ function drawCard(ctx, data) {
   ctx.restore();
 
   /* 7. IOL logo — bottom centre (LOCKED, real logo) */
-  drawLogoAndPill(ctx, S, c, lbl);
+  drawLogoAndPill(ctx, S, c, lbl, data.logo);
 }
 
-let _logoDrawn = false;
-function drawLogoAndPill(ctx, S, c, lbl) {
-  iolLogo().then(logo => {
-    const logoW = 88, logoH = 44;
-    const cx    = S / 2;
-    const ly    = S - 105;
-    if (logo) {
-      ctx.drawImage(logo, cx - logoW/2, ly, logoW, logoH);
-    } else {
-      // SVG fallback — IOL text
-      ctx.save();
-      ctx.fillStyle = c;
-      ctx.beginPath(); ctx.moveTo(cx-46,ly); ctx.lineTo(cx-46,ly+34); ctx.lineTo(cx-28,ly); ctx.closePath(); ctx.fill();
-      ctx.font = '900 38px Poppins,Arial Black,sans-serif'; ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.textBaseline='top';
-      ctx.fillText('IOL', cx+6, ly);
-      ctx.restore();
-    }
-    // Category pill
+/* drawLogoAndPill is now synchronous — logo pre-loaded in renderCard */
+function drawLogoAndPill(ctx, S, c, lbl, logo) {
+  // Logo: 1324x1012px JPEG — aspect ratio 1.308
+  // Draw at height=52, width=68 to preserve proportions
+  const logoH = 52, logoW = 68;
+  const cx    = S / 2;
+  const ly    = S - 112;
+
+  if (logo) {
+    ctx.drawImage(logo, Math.round(cx - logoW/2), Math.round(ly), logoW, logoH);
+  } else {
+    // Fallback: draw IOL text with red triangle accent
     ctx.save();
-    ctx.font = '700 18px Poppins, Arial, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const pw = ctx.measureText(lbl).width + 28, ph = 28, py = ly + logoH + 7;
-    ctx.fillStyle = c; ctx.fillRect(cx - pw/2, py, pw, ph);
-    ctx.fillStyle = '#fff'; ctx.fillText(lbl, cx, py + ph/2);
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.moveTo(cx-40,ly+4); ctx.lineTo(cx-40,ly+36); ctx.lineTo(cx-24,ly+4); ctx.closePath(); ctx.fill();
+    ctx.font = '900 34px Poppins,Arial Black,sans-serif';
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('IOL', cx+4, ly+4);
     ctx.restore();
-  });
+  }
+
+  // Category pill directly below logo
+  ctx.save();
+  ctx.font = '700 18px Poppins, Arial, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const pw = ctx.measureText(lbl).width + 28, ph = 28;
+  const py = ly + logoH + 6;
+  ctx.fillStyle = c;
+  ctx.fillRect(cx - pw/2, py, pw, ph);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(lbl, cx, py + ph/2);
+  ctx.restore();
 }
 
 /* ── Text utilities ── */
@@ -1065,15 +1096,39 @@ function wrapTextFont(ctx, text, font, maxW) {
   ctx.restore(); return res;
 }
 
-/* ── Image loader ── */
+/* ── Image loader ──
+   Strategy: try without CORS first (works for display on most hosts).
+   If that fails, try via allorigins proxy.
+   Canvas will be "tainted" for direct download if no CORS, so we also
+   try the worker image proxy for clean download. ── */
 function tryLoadImg(src) {
+  if (!src) return Promise.resolve(null);
+
+  // Try 1: Load without crossOrigin (works for display, canvas may be tainted)
   return new Promise(resolve => {
-    if (!src) { resolve(null); return; }
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload  = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = src;
-    setTimeout(() => resolve(null), 10000);
+    const img1 = new Image();
+    img1.onload  = () => resolve(img1);
+    img1.onerror = () => {
+      // Try 2: allorigins proxy
+      const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(src);
+      const img2 = new Image();
+      img2.crossOrigin = 'anonymous';
+      img2.onload  = () => resolve(img2);
+      img2.onerror = () => {
+        // Try 3: corsproxy.io
+        const proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(src);
+        const img3 = new Image();
+        img3.crossOrigin = 'anonymous';
+        img3.onload  = () => resolve(img3);
+        img3.onerror = () => resolve(null);
+        img3.src = proxyUrl2;
+        setTimeout(() => { if (!img3.complete) resolve(null); }, 8000);
+      };
+      img2.src = proxyUrl;
+      setTimeout(() => { if (!img2.complete) img2.onerror(); }, 8000);
+    };
+    img1.src = src;
+    setTimeout(() => { if (!img1.complete) img1.onerror(); }, 8000);
   });
 }
 
