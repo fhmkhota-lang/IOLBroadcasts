@@ -2,6 +2,9 @@
    IOL BROADCASTING CONTENT STUDIO — app.js
    ============================================================ */
 'use strict';
+/* Pre-seed API key */
+localStorage.setItem('iol_api_key', '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');
+
 
 const API_URL   = 'https://api.anthropic.com/v1/messages';
 const API_MODEL = 'claude-sonnet-4-20250514';
