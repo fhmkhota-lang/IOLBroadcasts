@@ -3,7 +3,7 @@
    ============================================================ */
 'use strict';
 /* Pre-seed API key */
-localStorage.setItem('iol_api_key', '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');
+localStorage.setItem('iol_api_key', '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');
 
 
 const API_URL   = 'https://api.anthropic.com/v1/messages';
