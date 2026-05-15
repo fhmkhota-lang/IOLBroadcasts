@@ -2,8 +2,6 @@
    IOL BROADCASTING CONTENT STUDIO — app.js
    ============================================================ */
 'use strict';
-/* Pre-seed API key */
-localStorage.setItem('iol_api_key', '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');
 
 
 const API_URL   = 'https://api.anthropic.com/v1/messages';
@@ -39,7 +37,7 @@ let selectedPlatforms = new Set(['Spotify']);
 const PAGE_SIZE       = 10;
 let visibleCount      = PAGE_SIZE;
 
-function getApiKey() { return (localStorage.getItem('iol_api_key') || '').trim(); }
+function getApiKey() { return 'via-worker'; } // Key stored in Cloudflare Worker secret
 function hasWorker()  { return WORKER_BASE_URL && WORKER_BASE_URL.trim().length > 0; }
 
 /* ============================================================ TABS */
@@ -128,7 +126,7 @@ function clearAll(){selectedIds.clear();renderStories();updateActionBar();}
 
 /* ============================================================ BULLETIN SCRIPT */
 document.getElementById('gen-bulletin-btn').addEventListener('click', async () => {
-  const apiKey=getApiKey(); if(!apiKey){showSettingsAlert();return;}
+  const apiKey='via-worker';
   const stories=allStories.filter(s=>selectedIds.has(s.id));
   const style=document.getElementById('anchor-style').value;
   const duration=document.getElementById('script-duration').value;
@@ -147,7 +145,7 @@ document.getElementById('gen-bulletin-btn').addEventListener('click', async () =
 
 /* ============================================================ CUSTOM SCRIPT */
 document.getElementById('gen-custom-btn').addEventListener('click', async () => {
-  const apiKey=getApiKey(); if(!apiKey){showSettingsAlert();return;}
+  const apiKey='via-worker';
   const headline=document.getElementById('custom-headline').value.trim();
   const content=document.getElementById('custom-content').value.trim();
   const category=document.getElementById('custom-category').value;
@@ -172,7 +170,7 @@ document.getElementById('gen-custom-btn').addEventListener('click', async () => 
 
 /* ============================================================ PODCAST */
 document.getElementById('gen-podcast-btn').addEventListener('click', async () => {
-  const apiKey=getApiKey(); if(!apiKey){showSettingsAlert();return;}
+  const apiKey='via-worker';
   const category=document.getElementById('pod-category').value;
   const audience=document.getElementById('pod-audience').value;
   const frequency=document.getElementById('pod-frequency').value;
@@ -214,13 +212,26 @@ function renderPodcast(pod,platforms) {
     +`<div class="pod-section"><div class="pod-section-title">Risk Factors &amp; Mitigation</div><div class="pod-section-content">${escHtml(pod.risk_factors||'')}</div></div>`;
 }
 
-/* ============================================================ CLAUDE API */
-async function callClaude(apiKey,prompt,maxTokens) {
-  maxTokens=maxTokens||1500;
-  const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:API_MODEL,max_tokens:maxTokens,messages:[{role:'user',content:prompt}]})});
-  if(!res.ok){const e=await res.json().catch(()=>({}));if(res.status===401)throw new Error('Invalid API key.');if(res.status===429)throw new Error('Rate limit — wait a moment.');throw new Error(e?.error?.message||'HTTP '+res.status);}
-  const d=await res.json(); if(d.error)throw new Error(d.error.message);
-  return(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+/* ============================================================ CLAUDE API
+   Calls routed through Cloudflare Worker — API key stored as worker secret.
+   No key needed in the browser or in GitHub. */
+async function callClaude(apiKey, prompt, maxTokens) {
+  maxTokens = maxTokens || 1500;
+  const endpoint = WORKER_BASE_URL.replace(/\/$/, '') + '/claude';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: API_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    if (e.error && e.error.includes('ANTHROPIC_KEY')) throw new Error('Add ANTHROPIC_KEY secret to your Cloudflare Worker (Settings → Variables and Secrets).');
+    if (res.status === 429) throw new Error('Rate limit — wait a moment.');
+    throw new Error(e?.error?.message || 'HTTP ' + res.status);
+  }
+  const d = await res.json();
+  if (d.error) throw new Error(d.error.message || JSON.stringify(d.error));
+  return (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
 }
 
 /* ============================================================ UI STATE */
@@ -233,9 +244,7 @@ function showState(prefix,state,errMsg) {
 }
 
 function showSettingsAlert() {
-  const key=prompt('Enter your Anthropic API key (starts with sk-ant-):','');
-  if(key&&key.trim().startsWith('sk-ant-')){localStorage.setItem('iol_api_key',key.trim());alert('API key saved.');}
-  else if(key)alert('That does not look like a valid Anthropic key.');
+  alert('Add your Anthropic API key as a secret named ANTHROPIC_KEY in your Cloudflare Worker dashboard (Settings → Variables and Secrets). No key needed here.');
 }
 
 /* ============================================================ COPY / DOWNLOAD */
@@ -425,7 +434,7 @@ function dlCanvas(fn){
 }
 
 document.getElementById('cd-generate-btn')?.addEventListener('click',async()=>{
-  const apiKey=getApiKey();if(!apiKey){showSettingsAlert();return;}
+  const apiKey='via-worker';
   const btn=document.getElementById('cd-generate-btn');const orig=btn.textContent;btn.textContent='Generating...';btn.disabled=true;
   try{
     const h=document.getElementById('cd-headline')?.value||designer.headline;
