@@ -5,7 +5,7 @@
 
 
 const API_URL   = 'https://api.anthropic.com/v1/messages';
-const API_MODEL = 'claude-sonnet-4-20250514';
+const API_MODEL = 'claude-sonnet-5';
 const WORKER_BASE_URL = 'https://ioltester.fhmkhota.workers.dev';
 
 const SECTIONS = ['news','sport','business','entertainment','technology','motoring','lifestyle'];
